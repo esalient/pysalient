@@ -1,5 +1,5 @@
 <p align="left", style="text-align: left">
-    <img align="center" src="logo/logo_2_no_border.svg" alt="Sandcastle">
+    <img align="center" src="logo/logo_3_no_border.svg" alt="Sandcastle">
     </img>
 </p>
 
