@@ -1,5 +1,5 @@
-<p align="left", style="text-align: left">
-    <img align="center" src="logo/logo_3_no_border.svg" alt="Sandcastle">
+<p style="text-align: left">
+    <img src="logo/logo_3_no_border.svg" alt="pySALIENT" >
     </img>
 </p>
 
