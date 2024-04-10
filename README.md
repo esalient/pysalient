@@ -7,3 +7,15 @@
 Python implementation of the SALIENT framework to 
 assist with clinical AI research and implementation.
 
+## Project Structure
+
+[//]: #a (update when structure is completed) 
+
+```bash
+.
+├── cli
+├── docs
+    └── architecture
+├── logo
+└── pysalient
+```
