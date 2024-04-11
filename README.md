@@ -19,10 +19,22 @@ Please see [CONTRIBUTING](CONTRIBUTING.md) for development setup.
 ```bash
 .
 ├── cli
+│ └── tests
 ├── docs
-    └── architecture
 ├── logo
 └── pysalient
+    ├── adapters
+    ├── benchmarks
+    ├── config
+    ├── datasets
+    ├── evaluation
+    ├── events
+    ├── experiments
+    ├── parser
+    ├── project
+    ├── reports
+    ├── task
+    └── tests
 ```
 
 
