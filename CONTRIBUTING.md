@@ -16,13 +16,14 @@ In order to modify the source code, `git` is required.
 
 ### Local install
 
-To install the package locally for development, create an environment (python 3.11).
+To install the package locally for development, create an environment (python 3.11), we recommend using [uv](https://astral.sh/blog/uv) with [venv](https://docs.astral.sh/uv/pip/environments/)
 
 ```bash
-python -m pip install -e pysalient/
+uv venv --python 3.11
+# activate
+source .venv/bin/activate # windows: .\.venv\Scripts\activate
+uv pip install -e ".[dev]"
 ```
-
-We recommend using [mamba](https://mamba.readthedocs.io/en/latest/) to create the Python environment.
 
 ## Prerequisites
 
@@ -42,7 +43,7 @@ For [turbODBC](https://turbodbc.readthedocs.io/en/latest/pages/getting_started.h
 [//]: #b (review and add make for multiple test setups)
 
 - [pytest](https://docs.pytest.org/en/latest/) to define, discover, and run tests
-- [flake8](https://flake8.pycqa.org/en/latest/) for code linting
+- [ruff](https://docs.astral.sh/ruff/) for code linting
 - [black](https://github.com/psf/black) for coding formatting
 - [mypy](https://mypy.readthedocs.io/en/stable/) for static type checking
 - [pre-commit](https://pre-commit.com/) to easily run checks

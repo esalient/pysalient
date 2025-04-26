@@ -1,0 +1,128 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pysalient"
+version = "0.1.0"
+description = "pySALIENT: Python implementation of the SALIENT framework to assist with clinical AI research and implementation"
+readme = "README.md"
+requires-python = ">=3.11" # Adjust if you need a different minimum version
+license = { file = "LICENSE" }
+authors = [
+    { name = "pySALIENT Contributors" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+    "pydantic",
+    "pyarrow",
+    "numpy",
+    "pandas",
+    "scikit-learn" # Added for evaluation metrics
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "black[jupyter]",
+    "furo",
+    "mypy",
+    "myst-parser",
+    "pytest",
+    "pytest-cov", # Added for code coverage
+    "ruff",
+    "sphinx",
+    "pandas",
+    "pyarrow",
+    "pydantic"
+]
+examples = [
+    "ipykernel",
+    "jupyterlab",
+]
+
+  plot = [
+      "matplotlib", # Added for plotting ROC/PRC curves
+  ]
+
+[project.urls]
+Homepage = "https://github.com/esalient/pysalient"
+Repository = "https://github.com/esalient/pysalient"
+
+# --- Tool Configurations ---
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+# include = '\.pyi?$'
+# exclude = '''
+# /(
+#     \.eggs
+#   | \.git
+#   | \.hg
+#   | \.mypy_cache
+#   | \.tox
+#   | \.venv
+#   | _build
+#   | buck-out
+#   | build
+#   | dist
+# )/
+# '''
+
+[tool.ruff]
+# Exclude specific directories if necessary (e.g., virtualenvs)
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+line-length = 88
+
+# Assume Python 3.11+
+target-version = "py311"
+
+[tool.ruff.lint]
+# Enable Pyflakes, Pycodestyle, isort, Pyupgrade, Naming conventions etc.
+# See https://docs.astral.sh/ruff/rules/ for all rules
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"] # Ignore line too long errors
+
+# Allow autofix for all enabled rules (when --fix)
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+# Like Black, use Python 3.6 formatting.
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+# Jupyter Notebook formatting is implicitly enabled by Ruff when encountering .ipynb files.
+# The format options above apply to the Python code within notebooks.
