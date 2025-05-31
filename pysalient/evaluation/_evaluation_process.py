@@ -519,6 +519,9 @@ def _process_single_evaluation(
             f1_lower_ci = _safe_round(f1_lower_ci, decimal_places)
             f1_upper_ci = _safe_round(f1_upper_ci, decimal_places)
 
+            # Round threshold value as well
+            threshold = _safe_round(threshold, decimal_places)
+
         # Calculate Time to First Alert for this threshold
         time_to_first_alert_value: float | None = None
         time_to_first_alert_unit: str | None = None

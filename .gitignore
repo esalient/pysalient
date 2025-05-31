@@ -161,3 +161,6 @@ cython_debug/
 
 # dev scratch
 scratch
+
+# ruff
+.ruff_cache

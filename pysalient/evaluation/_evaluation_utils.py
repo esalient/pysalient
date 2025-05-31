@@ -26,41 +26,48 @@ def _generate_thresholds(
         and all(isinstance(x, int | float) for x in threshold_spec)
     ):
         start, stop, step = threshold_spec
-        # Heuristic: Treat as range ONLY if step is clearly non-zero and valid direction
-        # A very small step might indicate an explicit list, e.g., (0.1, 0.10001, 0.10002)
-        # Let's assume any step implies range intention for a 3-element numeric tuple
-        if step == 0:
-            # Explicitly disallow zero step when it looks like a range spec
-            raise ValueError("Threshold step cannot be zero for range specification.")
-        if step < 0:
-            # We decided to only support positive steps for ranges
-            raise ValueError("Threshold step must be positive for range specification.")
-        if start > stop:
-            raise ValueError(
-                "Threshold range start cannot be greater than stop with a positive step."
-            )
 
-        # Use np.linspace for potentially better precision with float steps
-        # Add small epsilon to step comparison to handle potential float issues near zero
-        if step <= 1e-9:  # Avoid division by zero or tiny steps
-            raise ValueError(
-                "Threshold step must be positive and non-negligible for range specification."
-            )
-        # Ensure we handle the case where start and stop are the same
-        if np.isclose(start, stop):
-            num_points = 1
+        # Heuristic: Treat as explicit list if step is significantly larger compared to range
+        # This handles cases like (0.2, 0.6, 0.8) which should be explicit values
+        # Use a tolerance to handle floating point precision issues
+        range_size = abs(stop - start)
+        if step > range_size * 1.1 and range_size > 0:  # 10% tolerance for floating point
+            # Treat as explicit list instead of range
+            thresholds_out = [float(t) for t in threshold_spec]
         else:
-            # Calculate number of points, rounding to handle potential float inaccuracies
-            num_points = int(round((stop - start) / step)) + 1
-            # Basic sanity check on calculated points
-            if num_points <= 0:
+            # Treat as range specification
+            if step == 0:
+                # Explicitly disallow zero step when it looks like a range spec
+                raise ValueError("Threshold step cannot be zero for range specification.")
+            if step < 0:
+                # We decided to only support positive steps for ranges
+                raise ValueError("Threshold step must be positive for range specification.")
+            if start > stop:
                 raise ValueError(
-                    f"Calculated number of threshold points ({num_points}) is not positive. Check start/stop/step."
+                    "Threshold range start cannot be greater than stop with a positive step."
                 )
-            # Consider adding an upper bound check if very large num_points are unexpected
 
-        thresholds_np = np.linspace(start, stop, num_points)
-        thresholds_out = np.clip(thresholds_np, 0.0, 1.0).tolist()
+            # Use np.linspace for potentially better precision with float steps
+            # Add small epsilon to step comparison to handle potential float issues near zero
+            if step <= 1e-9:  # Avoid division by zero or tiny steps
+                raise ValueError(
+                    "Threshold step must be positive and non-negligible for range specification."
+                )
+            # Ensure we handle the case where start and stop are the same
+            if np.isclose(start, stop):
+                num_points = 1
+            else:
+                # Calculate number of points, rounding to handle potential float inaccuracies
+                num_points = int(round((stop - start) / step)) + 1
+                # Basic sanity check on calculated points
+                if num_points <= 0:
+                    raise ValueError(
+                        f"Calculated number of threshold points ({num_points}) is not positive. Check start/stop/step."
+                    )
+                # Consider adding an upper bound check if very large num_points are unexpected
+
+            thresholds_np = np.linspace(start, stop, num_points)
+            thresholds_out = np.clip(thresholds_np, 0.0, 1.0).tolist()
 
     # Case 2: Any other list or tuple (including 3-element tuple with non-numeric or non-tuple type)
     elif isinstance(threshold_spec, list | tuple):
