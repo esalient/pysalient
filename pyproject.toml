@@ -126,3 +126,16 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 # Jupyter Notebook formatting is implicitly enabled by Ruff when encountering .ipynb files.
 # The format options above apply to the Python code within notebooks.
+
+[tool.pytest.ini_options]
+# Specify which plugins to use
+addopts = [
+    "--cov=pysalient",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "-v"
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
