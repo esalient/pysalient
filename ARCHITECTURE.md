@@ -17,7 +17,8 @@ The subdirectories outlines key components:
 - reports: Produce visualisation based on user configuration.
 - parser: Read configuration files and instantiate python objects.
 - task: Actions that pySALIENT perform when invoked.
-
+- io: File I/O management
+- visualisation: Visualisation module
 
 [//]: #c (Evaluation package will be moved to here)
 
