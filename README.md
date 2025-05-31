@@ -11,32 +11,27 @@ Python implementation of the SALIENT framework to
 assist with clinical AI research and implementation.
 </div>
 
-
 ## Development
 
 Please see [CONTRIBUTING](CONTRIBUTING.md) for development setup.
 
-## Project Structure
+## pySALIENT Structure
 
 ```bash
 .
-├── cli
-│ └── tests
-├── docs
-├── logo
-└── pysalient
-    ├── adapters
-    ├── benchmarks
-    ├── config
-    ├── datasets
-    ├── evaluation
-    ├── events
-    ├── experiments
-    ├── parser
-    ├── project
-    ├── reports
-    ├── task
-    └── tests
+├── adapters
+├── benchmarks
+├── config
+├── datasets
+├── evaluation
+├── events
+├── experiments
+├── io
+├── parser
+├── project
+├── reports
+├── task
+└── visualisation
 ```
 
 
