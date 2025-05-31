@@ -1,0 +1,209 @@
+name: pySALIENT CI
+
+on:
+  push:
+    branches: [ "main" ]
+    tags:
+      - 'v*.*.*' # Trigger on version tags
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Use the minimum supported Python version
+        python-version: ["3.11"]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install and configure uv
+      run: |
+        # Download and run the installer
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+
+        # Add uv to PATH and make it available immediately
+        export PATH="$HOME/.cargo/bin:$PATH"
+        
+        # Verify uv is installed and show its location
+        which uv
+        uv --version
+
+    - name: Install dependencies
+      run: |
+        # Install directly into the GitHub Actions Python environment
+        uv pip install --system -e ".[dev,examples]" # Include dev and examples extras
+
+    - name: Lint with Ruff
+      run: uv run ruff check .
+
+    - name: Check formatting with Black
+      run: uv run black --check .
+
+    - name: Test with pytest and generate coverage
+      run: uv run pytest --cov=pysalient --cov-report=xml --cov-report=term-missing tests/
+
+  update-version:
+    # Run this job only when a tag starting with 'v' is pushed
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      # Required to push changes back to the repository
+      contents: write
+    steps:
+    - name: Debug github.ref
+      run: echo "GITHUB_REF is ${{ github.ref }}"
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        # Fetch all history for all tags and branches
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Or your desired Python version
+
+    - name: Extract version number from tag
+      run: echo "VERSION_NUMBER=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+    - name: Update version in pyproject.toml
+      run: |
+        echo "Updating pyproject.toml to version ${{ env.VERSION_NUMBER }}"
+        # This sed command attempts to find 'version = "..."' under the [project] section.
+        # Adjust the regex if your version is under [tool.poetry] or elsewhere.
+        sed -i "/^\[project\]/,/^\s*version =/ s/^\(\s*version\s*=\s*\)\".*\"/\1\"${{ env.VERSION_NUMBER }}\"/" pyproject.toml
+        echo "pyproject.toml after update:"
+        cat pyproject.toml
+
+    - name: Update version in docs/source/conf.py
+      run: |
+        echo "Updating docs/source/conf.py to version ${{ env.VERSION_NUMBER }}"
+        # This sed command finds the line starting with 'release =' and replaces the value.
+        sed -i "s/^release = .*/release = '${{ env.VERSION_NUMBER }}'/" docs/source/conf.py
+        echo "docs/source/conf.py after update:"
+        cat docs/source/conf.py
+
+    - name: Configure Git
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+    - name: Commit and push changes
+      run: |
+        git add pyproject.toml docs/source/conf.py
+        # Check if there are staged changes
+        if git diff --staged --quiet; then
+          echo "No version changes to commit."
+        else
+          echo "Committing version updates..."
+          git commit -m "Update version to ${{ env.VERSION_NUMBER }} [skip ci]"
+          # Determine the base branch (e.g., main or master)
+          # This assumes the tag was pushed based on the default branch.
+          BASE_BRANCH=$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's|origin/||')
+          echo "Pushing updated version files to $BASE_BRANCH branch..."
+          git push origin HEAD:$BASE_BRANCH
+        fi
+
+  update-coverage-badge:
+    name: Update Coverage Badge
+    # Run only on pushes to the main branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build # Run after the build job succeeds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Need permission to push changes
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11' # Match the build job
+
+    - name: Install and configure uv
+      run: |
+        # Download and run the installer
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        # Add uv to PATH and make it available immediately
+        export PATH="$HOME/.cargo/bin:$PATH"
+        # Verify uv is installed
+        which uv
+        uv --version
+
+    - name: Install dependencies
+      run: |
+        # Install dependencies needed for coverage run
+        uv pip install --system -e ".[dev,examples]"
+
+    - name: Run coverage and extract percentage
+      id: coverage
+      run: |
+        echo "Running pytest with coverage..."
+        # Run pytest and capture output
+        # Note: Using --cov-report=term-missing to ensure the TOTAL line is printed
+        COVERAGE_OUTPUT=$(uv run pytest --cov=pysalient --cov-report=term-missing tests/)
+        echo "Pytest output:"
+        echo "$COVERAGE_OUTPUT"
+
+        # Extract the TOTAL line
+        TOTAL_LINE=$(echo "$COVERAGE_OUTPUT" | grep '^TOTAL ') # Match start of line for robustness
+        echo "Total line found: '$TOTAL_LINE'"
+
+        # Extract the percentage number before the '%' sign
+        COVERAGE_PERCENTAGE=$(echo "$TOTAL_LINE" | sed -n 's/.* \([0-9]\+\)%.*/\1/p')
+        echo "Extracted percentage: '$COVERAGE_PERCENTAGE'"
+
+        # Basic validation
+        if ! [[ "$COVERAGE_PERCENTAGE" =~ ^[0-9]+$ ]]; then
+          echo "Error: Could not extract a valid coverage percentage from the TOTAL line."
+          echo "Full pytest output was:"
+          echo "$COVERAGE_OUTPUT"
+          exit 1
+        fi
+
+        echo "Coverage Percentage: ${COVERAGE_PERCENTAGE}%"
+        # Set the percentage as an environment variable for subsequent steps
+        echo "COVERAGE_PERCENTAGE=$COVERAGE_PERCENTAGE" >> $GITHUB_ENV
+
+    - name: Update README.md with coverage badge
+      run: |
+        echo "Updating README.md with coverage: ${{ env.COVERAGE_PERCENTAGE }}%"
+        # Use sed to find the badge URL and replace the number part
+        # Handles badges like coverage-93-red or coverage-100-green
+        # Looks for 'coverage-' followed by digits, followed by a '-' or '?'
+        sed -i -E "s/(badge\/coverage-)[0-9]+(-|\?)/\1${{ env.COVERAGE_PERCENTAGE }}\2/" README.md
+
+        echo "--- README.md after update ---"
+        cat README.md
+        echo "--- End of README.md ---"
+
+
+    - name: Configure Git
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+    - name: Commit and Push README.md changes
+      run: |
+        git add README.md
+        # Check if README.md has actual changes staged
+        if git diff --staged --quiet README.md; then
+          echo "No coverage badge changes detected in README.md. Nothing to commit."
+        else
+          echo "Coverage badge changed. Committing update..."
+          git commit -m "Update coverage badge to ${{ env.COVERAGE_PERCENTAGE }}% [skip ci]"
+          echo "Pushing updated README.md to main branch..."
+          # Use HEAD:main to explicitly push the current commit to the main branch
+          git push origin HEAD:main
+        fi
