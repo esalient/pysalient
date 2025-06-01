@@ -31,8 +31,7 @@ uv pip install -e ".[dev]"
 [//]: #b (review and add make for multiple test setups)
 
 - [pytest](https://docs.pytest.org/en/latest/) to define, discover, and run tests
-- [ruff](https://docs.astral.sh/ruff/) for code linting
-- [black](https://github.com/psf/black) for coding formatting
+- [ruff](https://docs.astral.sh/ruff/) for code linting and formatting
 - [mypy](https://mypy.readthedocs.io/en/stable/) for static type checking
 - [pre-commit](https://pre-commit.com/) to easily run checks
 - [changie](https://changie.dev/) to create Changelog entries, without merge conflicts

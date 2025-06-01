@@ -164,3 +164,6 @@ scratch
 
 # ruff
 .ruff_cache
+
+# uv
+uv.lock

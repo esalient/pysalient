@@ -32,8 +32,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "black",
-    "black[jupyter]",
     "furo",
     "mypy",
     "myst-parser",
@@ -59,25 +57,6 @@ Homepage = "https://github.com/esalient/pysalient"
 Repository = "https://github.com/esalient/pysalient"
 
 # --- Tool Configurations ---
-
-[tool.black]
-line-length = 88
-target-version = ['py311']
-# include = '\.pyi?$'
-# exclude = '''
-# /(
-#     \.eggs
-#   | \.git
-#   | \.hg
-#   | \.mypy_cache
-#   | \.tox
-#   | \.venv
-#   | _build
-#   | buck-out
-#   | build
-#   | dist
-# )/
-# '''
 
 [tool.ruff]
 # Exclude specific directories if necessary (e.g., virtualenvs)
