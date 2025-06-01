@@ -21,6 +21,11 @@ Evaluation Module
 .. automodule:: pysalient.evaluation
    :members:
 
+Model Comparison Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: pysalient.evaluation.compare_models
+
 
 Visualisation and Display Helpers
 ---------------------------------

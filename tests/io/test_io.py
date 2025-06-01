@@ -49,6 +49,26 @@ def sample_dataframe(sample_data_dict):
     return pd.DataFrame(sample_data_dict)
 
 
+@pytest.fixture(scope="module")
+def sample_dataframe_with_nan():
+    """Provides a Pandas DataFrame with NaN values in probability column for testing imputation."""
+    import numpy as np
+    data = {
+        "encounter_id": [1, 1, 1, 2, 2, 3],
+        "event_timestamp": pd.to_datetime([
+            "2023-01-01 10:00:00",
+            "2023-01-01 11:00:00", 
+            "2023-01-01 12:00:00",
+            "2023-01-02 08:00:00",
+            "2023-01-02 09:00:00",
+            "2023-01-03 10:00:00",
+        ]),
+        "prediction_probability": [0.1, np.nan, 0.3, 0.8, np.nan, 0.5],  # NaN values
+        "true_label": [0, 0, 1, 1, 1, 0],
+    }
+    return pd.DataFrame(data)
+
+
 @pytest.fixture
 def valid_csv_path(tmp_path, sample_dataframe):
     """Creates a valid CSV file in a temporary directory."""
@@ -604,3 +624,80 @@ def test_export_missing_path_for_parquet(sample_arrow_table):
         export_evaluation_results(
             results_table=sample_arrow_table, format="parquet", output_path=None
         )
+
+
+##################################
+# Tests for NaN Imputation      #
+##################################
+
+
+def test_load_evaluation_data_with_nan_imputation_default(sample_dataframe_with_nan):
+    """Test that NaN values in probability column are imputed with default value (0.0)."""
+    import numpy as np
+    
+    # Verify original data has NaN values
+    assert sample_dataframe_with_nan['prediction_probability'].isna().sum() == 2
+    
+    # Load data with default imputation
+    result_table = load_evaluation_data(
+        source=sample_dataframe_with_nan,
+        y_proba_col="prediction_probability",
+        y_label_col="true_label",
+        aggregation_cols="encounter_id",
+        timeseries_col="event_timestamp",
+        # y_proba_col_impute defaults to 0.0
+    )
+    
+    # Check that no NaN values remain
+    proba_array = result_table["prediction_probability"].to_numpy()
+    assert not np.isnan(proba_array).any(), "NaN values should be imputed"
+    
+    # Check that NaN values were replaced with 0.0
+    expected_values = [0.1, 0.0, 0.3, 0.8, 0.0, 0.5]  # NaN -> 0.0
+    np.testing.assert_array_equal(proba_array, expected_values)
+
+
+def test_load_evaluation_data_with_nan_imputation_custom(sample_dataframe_with_nan):
+    """Test that NaN values in probability column are imputed with custom value."""
+    import numpy as np
+    
+    # Load data with custom imputation value
+    result_table = load_evaluation_data(
+        source=sample_dataframe_with_nan,
+        y_proba_col="prediction_probability",
+        y_label_col="true_label",
+        aggregation_cols="encounter_id",
+        timeseries_col="event_timestamp",
+        y_proba_col_impute=0.25,  # Custom impute value
+    )
+    
+    # Check that no NaN values remain
+    proba_array = result_table["prediction_probability"].to_numpy()
+    assert not np.isnan(proba_array).any(), "NaN values should be imputed"
+    
+    # Check that NaN values were replaced with 0.25
+    expected_values = [0.1, 0.25, 0.3, 0.8, 0.25, 0.5]  # NaN -> 0.25
+    np.testing.assert_array_equal(proba_array, expected_values)
+
+
+def test_load_evaluation_data_no_nan_no_change(sample_dataframe):
+    """Test that data without NaN values is unchanged by imputation logic."""
+    import numpy as np
+    
+    # Original data has no NaN values
+    assert not sample_dataframe['prediction_probability'].isna().any()
+    
+    # Load data with imputation enabled
+    result_table = load_evaluation_data(
+        source=sample_dataframe,
+        y_proba_col="prediction_probability",
+        y_label_col="true_label",
+        aggregation_cols="encounter_id",
+        timeseries_col="event_timestamp",
+        y_proba_col_impute=0.99,  # Should not affect anything
+    )
+    
+    # Check that values are unchanged
+    proba_array = result_table["prediction_probability"].to_numpy()
+    expected_values = [0.1, 0.2, 0.3, 0.8, 0.9, 0.5]  # Original values
+    np.testing.assert_array_equal(proba_array, expected_values)

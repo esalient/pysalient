@@ -26,6 +26,7 @@ def load_evaluation_data(
     task_col: str | None = None,
     assign_task_name: str | None = None,
     assign_model_name: str | None = None,
+    y_proba_col_impute: float = 0.0,
     source_type: (
         str | None
     ) = None,  # Explicitly 'csv', 'parquet', 'pandas' if needed, otherwise inferred
@@ -61,6 +62,9 @@ def load_evaluation_data(
                            If provided and `model_col` is None, a new column named 'model'
                            will be added to the table with this constant value. Raises ValueError
                            if a column named 'model' already exists or if `model_col` is also provided.
+        y_proba_col_impute: Value to use for imputing NaN values in the y_proba_col.
+                           Defaults to 0.0. This ensures that NaN prediction probabilities
+                           don't cause downstream evaluation failures.
         source_type: Optional hint for the source type ('csv', 'parquet', 'pandas').
                      If None, attempts to infer from the source path extension or type.
         read_options: Optional dictionary containing specific read options for
@@ -127,8 +131,31 @@ def load_evaluation_data(
         raise e
     # 'table', 'task_col', 'model_col' are now potentially updated
 
-    ################################
-    # 2.5 Perform Aggregation (if requested) #
+    #################################
+    # 2.3 Handle NaN Imputation     #
+    #################################
+    # Impute NaN values in the probability column if present
+    if y_proba_col in table.column_names:
+        proba_column = table[y_proba_col]
+        # Check if column has any null values using PyArrow compute
+        import pyarrow.compute as pc
+        
+        null_count = pc.sum(pc.is_null(proba_column)).as_py()
+        if null_count > 0:
+            # Impute NaN/null values with the specified impute value
+            imputed_column = pc.fill_null(proba_column, y_proba_col_impute)
+            
+            # Create new table with imputed column
+            schema = table.schema
+            columns = []
+            for i, field in enumerate(schema):
+                if field.name == y_proba_col:
+                    columns.append(imputed_column)
+                else:
+                    columns.append(table.column(i))
+            
+            table = pa.table(columns, schema=schema)
+
     ################################
     # 2.5 Perform Aggregation (if requested) #
     ################################
