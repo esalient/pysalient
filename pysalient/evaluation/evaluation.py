@@ -80,7 +80,8 @@ def evaluation(
     bootstrap_seed: (
         int | None
     ) = None,  # Used if calculate_au_ci=True OR (calculate_threshold_ci=True and threshold_ci_method='bootstrap')
-) -> pa.Table:
+    return_bootstrap_samples: bool = False,  # If True, return bootstrap samples for statistical testing
+) -> pa.Table | tuple[pa.Table, dict[str, np.ndarray]]:
     """
     Performs evaluation on prediction data across multiple thresholds.
 
@@ -163,10 +164,16 @@ def evaluation(
                           Used if `calculate_au_ci=True` OR (`calculate_threshold_ci=True` and `threshold_ci_method='bootstrap'`).
         bootstrap_seed: Optional random seed for reproducible bootstrap sampling.
                         Defaults to None. Used if `calculate_au_ci=True` OR (`calculate_threshold_ci=True` and `threshold_ci_method='bootstrap'`).
+        return_bootstrap_samples: If True, return bootstrap samples for statistical testing.
+                                  Requires `calculate_au_ci=True`. Returns a tuple of (evaluation_table, bootstrap_samples_dict).
+                                  Defaults to False.
 
     Returns:
-        A new PyArrow Table containing the evaluation results, with one row per
-        threshold. The metrics reflect performance on the input data.
+        If return_bootstrap_samples=False: A PyArrow Table containing the evaluation results.
+        If return_bootstrap_samples=True: A tuple containing (evaluation_table, bootstrap_samples_dict)
+            where bootstrap_samples_dict contains arrays of bootstrap samples for metrics.
+        
+        The evaluation table has one row per threshold and the metrics reflect performance on the input data.
         Columns include: 'modelid', 'filter_desc', 'threshold',
         'time_to_first_alert_value', 'time_to_first_alert_unit', 'AUROC',
         'AUROC_Lower_CI', 'AUROC_Upper_CI', 'AUPRC', 'AUPRC_Lower_CI',
@@ -216,6 +223,13 @@ def evaluation(
     # Add type check for calculate_threshold_ci
     if not isinstance(calculate_threshold_ci, bool):
         raise TypeError("Input 'calculate_threshold_ci' must be a boolean.")
+    
+    # Validate return_bootstrap_samples parameter
+    if not isinstance(return_bootstrap_samples, bool):
+        raise TypeError("Input 'return_bootstrap_samples' must be a boolean.")
+    if return_bootstrap_samples and not calculate_au_ci:
+        raise ValueError("return_bootstrap_samples=True requires calculate_au_ci=True.")
+    
     ###########################################
     # Validate CI Parameters and Dependencies #
     ###########################################
@@ -471,26 +485,52 @@ def evaluation(
                 "Internal error: probabilities or labels were not correctly prepared before evaluation call."
             )
 
-        results_list = _process_single_evaluation(
-            probas=probas_to_eval,
-            labels=labels_to_eval,
-            modelid=modelid,
-            filter_desc=filter_desc,
-            threshold_list=threshold_list,
-            timeseries_array=timeseries_array,  # Pass timeseries data
-            timeseries_pa_type=timeseries_pa_type,  # Pass original type
-            time_unit=time_unit,  # Pass time unit
-            aggregation_keys=None,
-            aggregation_cols=None,
-            decimal_places=decimal_places,
-            calculate_au_ci=calculate_au_ci,
-            calculate_threshold_ci=calculate_threshold_ci,
-            threshold_ci_method=threshold_ci_method,
-            ci_alpha=ci_alpha,
-            bootstrap_rounds=bootstrap_rounds,
-            bootstrap_seed=bootstrap_seed,
-            verbosity=verbosity,  # Pass verbosity down
-        )
+        bootstrap_samples = None  # Initialize bootstrap_samples variable
+        
+        if return_bootstrap_samples:
+            results_list, bootstrap_samples = _process_single_evaluation(
+                probas=probas_to_eval,
+                labels=labels_to_eval,
+                modelid=modelid,
+                filter_desc=filter_desc,
+                threshold_list=threshold_list,
+                timeseries_array=timeseries_array,  # Pass timeseries data
+                timeseries_pa_type=timeseries_pa_type,  # Pass original type
+                time_unit=time_unit,  # Pass time unit
+                aggregation_keys=None,
+                aggregation_cols=None,
+                decimal_places=decimal_places,
+                calculate_au_ci=calculate_au_ci,
+                calculate_threshold_ci=calculate_threshold_ci,
+                threshold_ci_method=threshold_ci_method,
+                ci_alpha=ci_alpha,
+                bootstrap_rounds=bootstrap_rounds,
+                bootstrap_seed=bootstrap_seed,
+                verbosity=verbosity,  # Pass verbosity down
+                return_bootstrap_samples=True,
+            )
+        else:
+            results_list = _process_single_evaluation(
+                probas=probas_to_eval,
+                labels=labels_to_eval,
+                modelid=modelid,
+                filter_desc=filter_desc,
+                threshold_list=threshold_list,
+                timeseries_array=timeseries_array,  # Pass timeseries data
+                timeseries_pa_type=timeseries_pa_type,  # Pass original type
+                time_unit=time_unit,  # Pass time unit
+                aggregation_keys=None,
+                aggregation_cols=None,
+                decimal_places=decimal_places,
+                calculate_au_ci=calculate_au_ci,
+                calculate_threshold_ci=calculate_threshold_ci,
+                threshold_ci_method=threshold_ci_method,
+                ci_alpha=ci_alpha,
+                bootstrap_rounds=bootstrap_rounds,
+                bootstrap_seed=bootstrap_seed,
+                verbosity=verbosity,  # Pass verbosity down
+                return_bootstrap_samples=False,
+            )
     except Exception as e:
         # Catch potential errors during the main evaluation process
         raise RuntimeError(
@@ -567,4 +607,7 @@ def evaluation(
             f"Failed to create result PyArrow Table from evaluation list: {e}\nResults List Sample: {results_list[:5]}"
         ) from e
 
-    return result_table
+    if return_bootstrap_samples:
+        return result_table, bootstrap_samples
+    else:
+        return result_table

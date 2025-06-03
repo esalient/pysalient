@@ -14,6 +14,12 @@ def compare_models(
     include_metrics: list[str] | None = None,
     decimal_places: int | None = None,
     verbosity: int = 0,
+    # Statistical significance testing parameters
+    calculate_statistical_significance: bool = False,
+    bootstrap_samples: list[dict[str, np.ndarray]] | None = None,
+    significance_alpha: float = 0.05,
+    n_permutations: int = 10000,
+    permutation_seed: int | None = None,
 ) -> pa.Table:
     """
     Compare evaluation results from multiple models.
@@ -35,6 +41,14 @@ def compare_models(
         decimal_places: Optional number of decimal places to round metric values.
                        If None, no rounding is performed.
         verbosity: Controls warning verbosity. 0 shows warnings, >0 suppresses them.
+        calculate_statistical_significance: If True, perform statistical significance testing
+                                           between pairs of models. Requires bootstrap_samples.
+        bootstrap_samples: List of bootstrap sample dictionaries from evaluation() calls.
+                          Required if calculate_statistical_significance=True.
+                          Each dict should contain metric names as keys and numpy arrays as values.
+        significance_alpha: Significance level for statistical tests (default: 0.05).
+        n_permutations: Number of permutations for permutation test (default: 10000).
+        permutation_seed: Random seed for permutation test reproducibility.
 
     Returns:
         PyArrow Table with columns:
@@ -44,6 +58,7 @@ def compare_models(
         - value: The metric value
         - lower_ci: Lower confidence interval (null if not available)
         - upper_ci: Upper confidence interval (null if not available)
+        - p_value: Statistical significance p-value (null if not calculated)
 
         Each row represents one metric value for one model at one threshold.
         Threshold-independent metrics (AUROC, AUPRC) are duplicated across
@@ -115,6 +130,35 @@ def compare_models(
         if not isinstance(decimal_places, int) or decimal_places < 0:
             raise ValueError("decimal_places must be a non-negative integer or None.")
 
+    # Validate statistical significance parameters
+    if not isinstance(calculate_statistical_significance, bool):
+        raise TypeError("calculate_statistical_significance must be a boolean.")
+    
+    if calculate_statistical_significance:
+        if bootstrap_samples is None:
+            raise ValueError(
+                "bootstrap_samples is required when calculate_statistical_significance=True."
+            )
+        if not isinstance(bootstrap_samples, list):
+            raise TypeError("bootstrap_samples must be a list of dictionaries.")
+        if len(bootstrap_samples) != len(evaluation_results):
+            raise ValueError(
+                f"bootstrap_samples length ({len(bootstrap_samples)}) must match "
+                f"evaluation_results length ({len(evaluation_results)})."
+            )
+        for i, samples_dict in enumerate(bootstrap_samples):
+            if not isinstance(samples_dict, dict):
+                raise TypeError(f"bootstrap_samples[{i}] must be a dictionary.")
+        
+        if not isinstance(significance_alpha, float) or not 0 < significance_alpha < 1:
+            raise ValueError("significance_alpha must be a float between 0 and 1 (exclusive).")
+        
+        if not isinstance(n_permutations, int) or n_permutations <= 0:
+            raise ValueError("n_permutations must be a positive integer.")
+        
+        if permutation_seed is not None and not isinstance(permutation_seed, int):
+            raise TypeError("permutation_seed must be an integer or None.")
+
     # Validate table schemas and get common columns
     first_table = evaluation_results[0]
     required_columns = {"threshold", "modelid", "filter_desc"}
@@ -160,6 +204,18 @@ def compare_models(
 
     if not metrics_to_use:
         raise ValueError("No metrics selected for comparison.")
+
+    # Calculate statistical significance if requested (must be done before building comparison data)
+    p_values_dict = {}
+    if calculate_statistical_significance:
+        p_values_dict = _calculate_pairwise_p_values(
+            bootstrap_samples=bootstrap_samples,
+            model_labels=model_labels,
+            metrics_to_use=metrics_to_use,
+            n_permutations=n_permutations,
+            permutation_seed=permutation_seed,
+            verbosity=verbosity,
+        )
 
     # Validate threshold consistency across tables
     threshold_arrays = []
@@ -239,6 +295,11 @@ def compare_models(
                     ):
                         upper_ci = round(float(upper_ci), decimal_places)
 
+                # Get p-value for this model-metric combination
+                p_value = None
+                if calculate_statistical_significance:
+                    p_value = p_values_dict.get((model_label, metric), None)
+
                 comparison_data.append(
                     {
                         "threshold": float(threshold),
@@ -247,6 +308,7 @@ def compare_models(
                         "value": value,
                         "lower_ci": lower_ci,
                         "upper_ci": upper_ci,
+                        "p_value": p_value,
                     }
                 )
 
@@ -259,6 +321,7 @@ def compare_models(
             pa.field("value", pa.float64()),
             pa.field("lower_ci", pa.float64()),
             pa.field("upper_ci", pa.float64()),
+            pa.field("p_value", pa.float64()),
         ]
     )
 
@@ -268,3 +331,156 @@ def compare_models(
         raise RuntimeError(f"Failed to create comparison table: {e}") from e
 
     return result_table
+
+
+def _perform_permutation_test(
+    samples_1: np.ndarray,
+    samples_2: np.ndarray,
+    n_permutations: int = 10000,
+    seed: int | None = None,
+) -> float:
+    """
+    Perform a two-sample permutation test to assess statistical significance.
+    
+    This test determines if two groups of bootstrap samples come from distributions
+    with the same mean. The null hypothesis is that the two groups have equal means.
+    
+    Args:
+        samples_1: Bootstrap samples from first model (e.g., AUROC values)
+        samples_2: Bootstrap samples from second model (e.g., AUROC values)
+        n_permutations: Number of permutations to perform (default: 10000)
+        seed: Random seed for reproducibility
+        
+    Returns:
+        p_value: Two-tailed p-value for the permutation test
+        
+    Raises:
+        ValueError: If samples are empty or have invalid values
+        TypeError: If inputs are not numpy arrays
+    """
+    # Input validation
+    if not isinstance(samples_1, np.ndarray) or not isinstance(samples_2, np.ndarray):
+        raise TypeError("Both samples must be numpy arrays")
+    
+    if len(samples_1) == 0 or len(samples_2) == 0:
+        raise ValueError("Sample arrays cannot be empty")
+    
+    # Remove NaN values
+    samples_1_clean = samples_1[~np.isnan(samples_1)]
+    samples_2_clean = samples_2[~np.isnan(samples_2)]
+    
+    if len(samples_1_clean) == 0 or len(samples_2_clean) == 0:
+        warnings.warn(
+            "All samples contain NaN values. Cannot perform permutation test.",
+            RuntimeWarning
+        )
+        return np.nan
+    
+    # Calculate observed difference in means
+    observed_diff = np.mean(samples_1_clean) - np.mean(samples_2_clean)
+    
+    # Combine all samples
+    combined_samples = np.concatenate([samples_1_clean, samples_2_clean])
+    n1, n2 = len(samples_1_clean), len(samples_2_clean)
+    
+    # Set random seed for reproducibility
+    if seed is not None:
+        np.random.seed(seed)
+    
+    # Perform permutations
+    permuted_diffs = np.zeros(n_permutations)
+    
+    for i in range(n_permutations):
+        # Randomly shuffle combined samples
+        shuffled = np.random.permutation(combined_samples)
+        
+        # Split into two groups of original sizes
+        perm_group1 = shuffled[:n1]
+        perm_group2 = shuffled[n1:n1+n2]
+        
+        # Calculate difference in means for this permutation
+        permuted_diffs[i] = np.mean(perm_group1) - np.mean(perm_group2)
+    
+    # Calculate two-tailed p-value
+    # Count how many permuted differences are as extreme or more extreme than observed
+    extreme_count = np.sum(np.abs(permuted_diffs) >= np.abs(observed_diff))
+    p_value = extreme_count / n_permutations
+    
+    return float(p_value)
+
+
+def _calculate_pairwise_p_values(
+    bootstrap_samples: list[dict[str, np.ndarray]],
+    model_labels: list[str],
+    metrics_to_use: list[str],
+    n_permutations: int,
+    permutation_seed: int | None,
+    verbosity: int,
+) -> dict[tuple[str, str], float]:
+    """
+    Calculate pairwise statistical significance between models for each metric.
+    
+    For now, this compares only the first two models. In the future, this could
+    be extended to handle all pairwise comparisons.
+    
+    Args:
+        bootstrap_samples: List of bootstrap sample dictionaries
+        model_labels: List of model labels
+        metrics_to_use: List of metrics to test
+        n_permutations: Number of permutations for the test
+        permutation_seed: Random seed for reproducibility
+        verbosity: Verbosity level for warnings
+        
+    Returns:
+        Dictionary with (model_label, metric) keys and p-values as values
+    """
+    p_values_dict = {}
+    
+    # For now, we only support comparing exactly 2 models
+    if len(bootstrap_samples) != 2:
+        if verbosity <= 0:
+            warnings.warn(
+                f"Statistical significance testing currently only supports exactly 2 models. "
+                f"Found {len(bootstrap_samples)} models. Skipping significance testing.",
+                UserWarning
+            )
+        return p_values_dict
+    
+    model_1_samples = bootstrap_samples[0]
+    model_2_samples = bootstrap_samples[1]
+    model_1_label = model_labels[0]
+    model_2_label = model_labels[1]
+    
+    for metric in metrics_to_use:
+        # Check if both models have bootstrap samples for this metric
+        if metric not in model_1_samples or metric not in model_2_samples:
+            if verbosity <= 0:
+                warnings.warn(
+                    f"Metric '{metric}' not found in bootstrap samples for both models. "
+                    "Skipping significance test for this metric.",
+                    UserWarning
+                )
+            continue
+        
+        try:
+            # Perform permutation test
+            p_value = _perform_permutation_test(
+                samples_1=model_1_samples[metric],
+                samples_2=model_2_samples[metric],
+                n_permutations=n_permutations,
+                seed=permutation_seed,
+            )
+            
+            # Store p-value for both models (they get the same p-value)
+            p_values_dict[(model_1_label, metric)] = p_value
+            p_values_dict[(model_2_label, metric)] = p_value
+            
+        except Exception as e:
+            if verbosity <= 0:
+                warnings.warn(
+                    f"Failed to calculate statistical significance for metric '{metric}': {e}",
+                    RuntimeWarning
+                )
+            continue
+    
+    return p_values_dict

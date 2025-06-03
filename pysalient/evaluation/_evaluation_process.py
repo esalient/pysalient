@@ -72,7 +72,8 @@ def _process_single_evaluation(
     bootstrap_rounds: int = 1000,
     bootstrap_seed: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
-) -> list[dict[str, Any]]:  # noqa: C901
+    return_bootstrap_samples: bool = False,  # Add parameter to return bootstrap samples
+) -> list[dict[str, Any]] | tuple[list[dict[str, Any]], dict[str, np.ndarray]]:  # noqa: C901
     # Define the analytical methods for confidence interval calculations
     analytical_methods = ["normal", "wilson", "agresti-coull"]
     """
@@ -162,6 +163,9 @@ def _process_single_evaluation(
     # Calculate Overall Confidence Intervals (Bootstrap only)
     auroc_lower_ci, auroc_upper_ci = None, None
     auprc_lower_ci, auprc_upper_ci = None, None
+    
+    # Initialize bootstrap samples dictionary for collection
+    bootstrap_samples_dict = {}
 
     # Overall CI only uses bootstrap method for now
     if calculate_au_ci and calculate_bootstrap_ci is not None:
@@ -169,26 +173,52 @@ def _process_single_evaluation(
         if not np.isnan(auroc) and not np.isnan(auprc):
             try:
                 # Calculate CI for AUROC
-                auroc_lower_ci, auroc_upper_ci = calculate_bootstrap_ci(
-                    y_true=labels,
-                    y_pred=probas,
-                    metric_func=roc_auc_score,  # Pass the function itself
-                    n_rounds=bootstrap_rounds,
-                    alpha=ci_alpha,
-                    seed=bootstrap_seed,
-                    verbosity=verbosity,  # Pass verbosity
-                )
+                if return_bootstrap_samples:
+                    auroc_lower_ci, auroc_upper_ci, auroc_samples = calculate_bootstrap_ci(
+                        y_true=labels,
+                        y_pred=probas,
+                        metric_func=roc_auc_score,  # Pass the function itself
+                        n_rounds=bootstrap_rounds,
+                        alpha=ci_alpha,
+                        seed=bootstrap_seed,
+                        verbosity=verbosity,  # Pass verbosity
+                        return_samples=True,
+                    )
+                    bootstrap_samples_dict["AUROC"] = auroc_samples
+                else:
+                    auroc_lower_ci, auroc_upper_ci = calculate_bootstrap_ci(
+                        y_true=labels,
+                        y_pred=probas,
+                        metric_func=roc_auc_score,  # Pass the function itself
+                        n_rounds=bootstrap_rounds,
+                        alpha=ci_alpha,
+                        seed=bootstrap_seed,
+                        verbosity=verbosity,  # Pass verbosity
+                    )
 
                 # Calculate CI for AUPRC
-                auprc_lower_ci, auprc_upper_ci = calculate_bootstrap_ci(
-                    y_true=labels,
-                    y_pred=probas,
-                    metric_func=average_precision_score,  # Pass the function itself
-                    n_rounds=bootstrap_rounds,
-                    alpha=ci_alpha,
-                    seed=bootstrap_seed,  # Use same seed for consistency if set
-                    verbosity=verbosity,  # Pass verbosity
-                )
+                if return_bootstrap_samples:
+                    auprc_lower_ci, auprc_upper_ci, auprc_samples = calculate_bootstrap_ci(
+                        y_true=labels,
+                        y_pred=probas,
+                        metric_func=average_precision_score,  # Pass the function itself
+                        n_rounds=bootstrap_rounds,
+                        alpha=ci_alpha,
+                        seed=bootstrap_seed,  # Use same seed for consistency if set
+                        verbosity=verbosity,  # Pass verbosity
+                        return_samples=True,
+                    )
+                    bootstrap_samples_dict["AUPRC"] = auprc_samples
+                else:
+                    auprc_lower_ci, auprc_upper_ci = calculate_bootstrap_ci(
+                        y_true=labels,
+                        y_pred=probas,
+                        metric_func=average_precision_score,  # Pass the function itself
+                        n_rounds=bootstrap_rounds,
+                        alpha=ci_alpha,
+                        seed=bootstrap_seed,  # Use same seed for consistency if set
+                        verbosity=verbosity,  # Pass verbosity
+                    )
 
             except Exception as e:
                 warnings.warn(
@@ -627,4 +657,8 @@ def _process_single_evaluation(
         # Append row data
         results.append(row_data)
 
-    return results
+    # Return results with optional bootstrap samples
+    if return_bootstrap_samples:
+        return results, bootstrap_samples_dict
+    else:
+        return results

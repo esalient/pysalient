@@ -28,7 +28,8 @@ def calculate_bootstrap_ci(
     alpha: float = 0.05,
     seed: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
-) -> tuple[float, float]:
+    return_samples: bool = False,  # New parameter to return bootstrap samples
+) -> tuple[float, float] | tuple[float, float, np.ndarray]:
     """
     Calculates bootstrap confidence intervals for a given metric function.
 
@@ -48,9 +49,11 @@ def calculate_bootstrap_ci(
                Must be in the range (0, 1).
         seed: Optional random seed for reproducibility of bootstrap sampling.
         verbosity: Controls logging level: <= -1 (INFO+), 0 (WARN+), >= 1 (ERROR only).
+        return_samples: If True, return the bootstrap samples array in addition to CI bounds.
 
     Returns:
-        A tuple containing the lower and upper bounds of the confidence interval.
+        If return_samples=False: A tuple containing the lower and upper bounds of the confidence interval.
+        If return_samples=True: A tuple containing (lower_ci, upper_ci, bootstrap_samples).
 
     Raises:
         ValueError: If alpha is not in the range (0, 1), or if input arrays
@@ -221,4 +224,7 @@ def calculate_bootstrap_ci(
     lower_ci_clipped = np.clip(lower_ci, 0.0, 1.0)
     upper_ci_clipped = np.clip(upper_ci, 0.0, 1.0)
 
-    return float(lower_ci_clipped), float(upper_ci_clipped)
+    if return_samples:
+        return float(lower_ci_clipped), float(upper_ci_clipped), valid_replicates
+    else:
+        return float(lower_ci_clipped), float(upper_ci_clipped)

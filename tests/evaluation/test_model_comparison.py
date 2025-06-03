@@ -117,6 +117,7 @@ class TestCompareModels:
             "value",
             "lower_ci",
             "upper_ci",
+            "p_value",
         }
         assert set(results.column_names) == expected_columns
 
@@ -344,3 +345,92 @@ class TestCompareModels:
         )["value"].to_pylist()[0]
 
         assert lgb_auroc > lr_auroc  # 0.82 > 0.75
+
+    def test_statistical_significance_basic(
+        self, sample_evaluation_result_1, sample_evaluation_result_2
+    ):
+        """Test statistical significance functionality with mock bootstrap samples."""
+        # Create mock bootstrap samples
+        bootstrap_samples = [
+            {
+                "AUROC": np.array([0.74, 0.75, 0.76, 0.74, 0.75] * 200),  # Model 1: ~0.75
+                "AUPRC": np.array([0.64, 0.65, 0.66, 0.64, 0.65] * 200),  # Model 1: ~0.65
+            },
+            {
+                "AUROC": np.array([0.81, 0.82, 0.83, 0.81, 0.82] * 200),  # Model 2: ~0.82
+                "AUPRC": np.array([0.72, 0.73, 0.74, 0.72, 0.73] * 200),  # Model 2: ~0.73
+            },
+        ]
+
+        results = compare_models(
+            [sample_evaluation_result_1, sample_evaluation_result_2],
+            model_labels=["LogRegressor", "LightGBM"],
+            include_metrics=["AUROC", "AUPRC"],
+            calculate_statistical_significance=True,
+            bootstrap_samples=bootstrap_samples,
+            n_permutations=1000,
+            permutation_seed=42,
+        )
+
+        # Check that p_value column has values
+        p_values = results["p_value"].to_pylist()
+        non_null_p_values = [p for p in p_values if p is not None and not np.isnan(p)]
+        assert len(non_null_p_values) > 0, "Should have some non-null p-values"
+
+        # Check that all rows for the same metric have the same p-value
+        auroc_rows = results.filter(pa.compute.equal(results["metric"], "AUROC"))
+        auroc_p_values = auroc_rows["p_value"].to_pylist()
+        unique_auroc_p_values = set(auroc_p_values)
+        assert len(unique_auroc_p_values) == 1, "All AUROC rows should have the same p-value"
+
+        # P-values should be between 0 and 1
+        for p_val in non_null_p_values:
+            assert 0 <= p_val <= 1, f"P-value {p_val} should be between 0 and 1"
+
+    def test_statistical_significance_validation(
+        self, sample_evaluation_result_1, sample_evaluation_result_2
+    ):
+        """Test validation of statistical significance parameters."""
+        # Test missing bootstrap_samples
+        with pytest.raises(ValueError, match="bootstrap_samples is required"):
+            compare_models(
+                [sample_evaluation_result_1, sample_evaluation_result_2],
+                calculate_statistical_significance=True,
+                bootstrap_samples=None,
+            )
+
+        # Test mismatched lengths
+        bootstrap_samples = [{"AUROC": np.array([0.75])}]  # Only one model
+        with pytest.raises(ValueError, match="bootstrap_samples length"):
+            compare_models(
+                [sample_evaluation_result_1, sample_evaluation_result_2],
+                calculate_statistical_significance=True,
+                bootstrap_samples=bootstrap_samples,
+            )
+
+        # Test invalid significance_alpha
+        bootstrap_samples = [
+            {"AUROC": np.array([0.75])},
+            {"AUROC": np.array([0.82])},
+        ]
+        with pytest.raises(ValueError, match="significance_alpha must be a float"):
+            compare_models(
+                [sample_evaluation_result_1, sample_evaluation_result_2],
+                calculate_statistical_significance=True,
+                bootstrap_samples=bootstrap_samples,
+                significance_alpha=1.5,  # Invalid
+            )
+
+    def test_statistical_significance_disabled_by_default(
+        self, sample_evaluation_result_1, sample_evaluation_result_2
+    ):
+        """Test that statistical significance is disabled by default."""
+        results = compare_models(
+            [sample_evaluation_result_1, sample_evaluation_result_2],
+            model_labels=["LogRegressor", "LightGBM"],
+        )
+
+        # All p_values should be None/null when not calculated
+        p_values = results["p_value"].to_pylist()
+        non_null_p_values = [p for p in p_values if p is not None and not np.isnan(p)]
+        assert len(non_null_p_values) == 0, "Should have no p-values when not calculated"
