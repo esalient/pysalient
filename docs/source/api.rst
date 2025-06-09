@@ -21,6 +21,20 @@ Evaluation Module
 .. automodule:: pysalient.evaluation
    :members:
 
+Time-to-Event Metrics
+^^^^^^^^^^^^^^^^^^^^^
+
+The evaluation module now supports calculating time-to-event metrics for clinical events. 
+These metrics calculate the time from model alerts to clinical events for true positives only, 
+aggregated at the encounter level.
+
+Key parameters for time-to-event functionality:
+
+- ``time_to_event_cols``: Dictionary mapping metric names to clinical event column names
+- ``aggregation_func``: Aggregation function for encounter-level aggregation (default: "median")
+
+For detailed parameter documentation and examples, see the :func:`pysalient.evaluation.evaluation` function docstring.
+
 
 Visualisation and Display Helpers
 ---------------------------------
@@ -66,25 +80,28 @@ The primary function currently is `format_evaluation_table`, which helps display
 
    # --- Run evaluation ---
    # Note: 'assigned_table' was loaded with 'timeseries_col' set to 'event_timestamp'.
-   # The 'evaluation' function will use this along with the new event timing parameters.
+   # The 'evaluation' function will use this along with the new time-to-event parameters.
    results_table = eval.evaluation(
        data=assigned_table,
        modelid="BaselineLogisticRegression",
        filter_desc="placeholder_filter",
        thresholds=(0.1, 0.9, 0.1),
-       timeseries_col=col_map['time'], # Explicitly pass, matches what load_evaluation_data uses
-       time_unit="hours", # Global unit for all time-to-event calculations.
-                          # Mandatory if 'timeseries_col' is provided and event timing is performed.
-       event_columns_for_timing=['some_binary_event_column'], # Example event column
-       # event_column_time_units has been removed.
+       timeseries_col=col_map['time'], # Alert timestamps for time-to-first-alert
+       time_unit="hours", # Required when timeseries_col is numeric
+       time_to_event_cols={
+           'culture': 'blood_culture_timestamp',
+           'antibiotics': 'antibiotic_timestamp'
+       }, # Optional: clinical event columns for time-to-event metrics
+       aggregation_func="median", # Aggregation function for time-to-event (default: median)
        decimal_places=3 # Evaluation rounding (optional)
    )
 
-   # The 'results_table' will now contain dynamic columns such as
-   # 'time_to_first_some_binary_event_column_value' for each event specified
-   # in 'event_columns_for_timing', and a single shared 'time_to_event_units' column
-   # populated with the global 'time_unit' (e.g., "hours").
-   # Legacy 'time_to_first_alert_value' may also be present if applicable.
+   # The 'results_table' will now contain dynamic columns for time-to-event metrics:
+   # - 'median_hrs_from_first_alert_to_culture' (or other aggregation function)
+   # - 'count_first_alerts_before_culture' 
+   # - 'count_first_alerts_after_or_at_culture'
+   # - Similar columns for 'antibiotics' 
+   # - Standard 'time_to_first_alert_value' for when model first exceeds threshold
 
    # --- Format for display ---
    # Use the helper to format float columns (e.g., to 3 decimal places)

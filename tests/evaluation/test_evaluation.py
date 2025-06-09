@@ -34,7 +34,7 @@ SYNTH_LABEL_COL = "synth_labels"
 SAMPLE_DATA_PATH = os.path.join("tests", "test_data", "anonymised_sample.parquet")
 # Column map based on the notebook's inspection (adjust if file changes)
 SAMPLE_COL_MAP = {
-    "y_proba": "prediction_probability",
+    "y_proba": "prediction_proba_1",
     "y_label": "true_label",
     "agg": "encounter_id",
     "time": "event_timestamp",
@@ -231,8 +231,51 @@ def test_generate_thresholds_invalid(spec, error_type):
 # Tests for evaluation #
 ########################
 
-# Define expected schema including all CI columns
-EXPECTED_SCHEMA_FULL = pa.schema(
+# Define expected schema without time-to-first-alert columns (for tests without timeseries_col)
+EXPECTED_SCHEMA_BASE = pa.schema(
+    [
+        pa.field("modelid", pa.string()),
+        pa.field("filter_desc", pa.string()),
+        pa.field("threshold", pa.float64()),
+        # Overall Metrics
+        pa.field("AUROC", pa.float64()),
+        pa.field("AUROC_Lower_CI", pa.float64()),
+        pa.field("AUROC_Upper_CI", pa.float64()),
+        pa.field("AUPRC", pa.float64()),
+        pa.field("AUPRC_Lower_CI", pa.float64()),
+        pa.field("AUPRC_Upper_CI", pa.float64()),
+        pa.field("Prevalence", pa.float64()),
+        pa.field("Sample_Size", pa.int64()),
+        pa.field("Label_Count", pa.int64()),
+        # Confusion Matrix
+        pa.field("TP", pa.int64()),
+        pa.field("TN", pa.int64()),
+        pa.field("FP", pa.int64()),
+        pa.field("FN", pa.int64()),
+        # Threshold Metrics + CIs
+        pa.field("PPV", pa.float64()),
+        pa.field("PPV_Lower_CI", pa.float64()),
+        pa.field("PPV_Upper_CI", pa.float64()),
+        pa.field("Sensitivity", pa.float64()),
+        pa.field("Sensitivity_Lower_CI", pa.float64()),
+        pa.field("Sensitivity_Upper_CI", pa.float64()),
+        pa.field("Specificity", pa.float64()),
+        pa.field("Specificity_Lower_CI", pa.float64()),
+        pa.field("Specificity_Upper_CI", pa.float64()),
+        pa.field("NPV", pa.float64()),
+        pa.field("NPV_Lower_CI", pa.float64()),
+        pa.field("NPV_Upper_CI", pa.float64()),
+        pa.field("Accuracy", pa.float64()),
+        pa.field("Accuracy_Lower_CI", pa.float64()),
+        pa.field("Accuracy_Upper_CI", pa.float64()),
+        pa.field("F1_Score", pa.float64()),
+        pa.field("F1_Score_Lower_CI", pa.float64()),
+        pa.field("F1_Score_Upper_CI", pa.float64()),
+    ]
+)
+
+# Define expected schema including time-to-first-alert columns (for tests with timeseries_col)
+EXPECTED_SCHEMA_WITH_TIMESERIES = pa.schema(
     [
         pa.field("modelid", pa.string()),
         pa.field("filter_desc", pa.string()),
@@ -276,6 +319,9 @@ EXPECTED_SCHEMA_FULL = pa.schema(
         pa.field("F1_Score_Upper_CI", pa.float64()),
     ]
 )
+
+# For backward compatibility, use the base schema as the default
+EXPECTED_SCHEMA_BASE = EXPECTED_SCHEMA_BASE
 
 # Define lists of CI columns for easier checking
 OVERALL_CI_COLS = [
@@ -364,8 +410,8 @@ def test_evaluation_basic(synth_table_with_metadata):
     results = evaluation(table, modelid, filter_desc, thresholds)  # Use direct import
 
     assert isinstance(results, pa.Table)
-    # Check against the full schema (now includes all CI columns)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    # Check against the base schema (without time-to-first-alert columns since timeseries_col=None)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows == len(expected_rows)
 
     results_dict = results.to_pydict()
@@ -446,8 +492,8 @@ def test_evaluation_rounding(synth_table_with_metadata):
 
     assert isinstance(results, pa.Table)
     assert results.schema.equals(
-        EXPECTED_SCHEMA_FULL, check_metadata=False
-    )  # Use full schema
+        EXPECTED_SCHEMA_BASE, check_metadata=False
+    )  # Use base schema since timeseries_col=None
     assert results.num_rows == len(expected_rows)
 
     results_dict = results.to_pydict()
@@ -814,7 +860,7 @@ def test_evaluation_with_au_ci_basic(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect 2 rows: 0.0 (default) + 0.5
     assert results.num_rows == 2
 
@@ -878,8 +924,8 @@ def test_evaluation_with_au_ci_reproducibility(synth_table_larger_with_metadata)
         bootstrap_seed=seed,
     )
 
-    assert results1.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results2.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results1.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results2.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
 
     results1_dict = results1.to_pydict()
     results2_dict = results2.to_pydict()
@@ -925,8 +971,8 @@ def test_evaluation_with_au_ci_different_alpha(synth_table_larger_with_metadata)
 
     assert isinstance(results_90, pa.Table)
     assert isinstance(results_99, pa.Table)
-    assert results_90.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results_99.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results_90.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results_99.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
 
     results_90_dict = results_90.to_pydict()
     results_99_dict = results_99.to_pydict()
@@ -981,7 +1027,7 @@ def test_evaluation_with_au_ci_and_rounding(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows > 0
 
     results_dict = results.to_pydict()
@@ -1054,7 +1100,7 @@ def test_evaluation_with_threshold_ci_basic(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect len(thresholds) + 1 rows due to default 0.0 threshold
     assert results.num_rows == len(thresholds) + 1
 
@@ -1130,8 +1176,8 @@ def test_evaluation_with_threshold_ci_reproducibility(synth_table_larger_with_me
         bootstrap_seed=seed,
     )
 
-    assert results1.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results2.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results1.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results2.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results1.num_rows == results2.num_rows
 
     results1_dict = results1.to_pydict()
@@ -1174,7 +1220,7 @@ def test_evaluation_with_threshold_ci_and_rounding(synth_table_larger_with_metad
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows > 0
 
     results_dict = results.to_pydict()
@@ -1221,7 +1267,7 @@ def test_evaluation_with_both_cis(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect len(thresholds) + 1 rows due to default 0.0 threshold
     assert results.num_rows == len(thresholds) + 1
 
@@ -1294,7 +1340,7 @@ def test_evaluation_with_analytical_threshold_ci(
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows == len(thresholds) + 1  # Includes default 0.0 threshold
 
     results_dict = results.to_pydict()
@@ -1399,6 +1445,7 @@ def test_integration_evaluation_consumes_metadata_successfully(loaded_sample_dat
             modelid="integration_test_model",
             filter_desc="integration_test_run",
             thresholds=[0.1, 0.5, 0.9],
+            time_unit="hours",  # Required since event_timestamp is numeric
             calculate_au_ci=False,  # Use renamed param
             calculate_threshold_ci=False,
         )
@@ -1408,7 +1455,7 @@ def test_integration_evaluation_consumes_metadata_successfully(loaded_sample_dat
     assert isinstance(results, pa.Table)
     # Expect 4 rows: 0.0 (default) + 0.1, 0.5, 0.9
     assert results.num_rows == 4
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_WITH_TIMESERIES, check_metadata=False)
 
     # Basic checks on results
     results_dict = results.to_pydict()
