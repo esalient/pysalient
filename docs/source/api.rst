@@ -35,6 +35,33 @@ Key parameters for time-to-event functionality:
 
 For detailed parameter documentation and examples, see the :func:`pysalient.evaluation.evaluation` function docstring.
 
+Performance and Safety Controls
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The evaluation function includes safety controls to prevent accidental execution of computationally expensive evaluations:
+
+- **Threshold Limit**: By default, evaluation is limited to 10 thresholds to prevent excessive computation
+- **Override Control**: Use ``force_eval=True`` to bypass the limit when needed for comprehensive analysis
+
+.. warning::
+   Evaluating many thresholds (>10) can be computationally expensive, especially with confidence interval calculations enabled. Use ``force_eval=True`` carefully and consider the computational cost.
+
+Example with many thresholds:
+
+.. code-block:: python
+
+   # This will raise an error by default
+   try:
+       results = eval.evaluation(data, "model", "filter", 
+                               thresholds=np.linspace(0, 1, 50))  # 50 thresholds
+   except ValueError as e:
+       print(f"Error: {e}")
+   
+   # Override the safety check
+   results = eval.evaluation(data, "model", "filter", 
+                           thresholds=np.linspace(0, 1, 50),
+                           force_eval=True)  # Allows 50 thresholds
+
 
 Visualisation and Display Helpers
 ---------------------------------
@@ -85,7 +112,7 @@ The primary function currently is `format_evaluation_table`, which helps display
        data=assigned_table,
        modelid="BaselineLogisticRegression",
        filter_desc="placeholder_filter",
-       thresholds=(0.1, 0.9, 0.1),
+       thresholds=(0.1, 0.9, 0.1),  # This generates 9 thresholds, within the default limit
        timeseries_col=col_map['time'], # Alert timestamps for time-to-first-alert
        time_unit="hours", # Required when timeseries_col is numeric
        time_to_event_cols={
@@ -93,7 +120,8 @@ The primary function currently is `format_evaluation_table`, which helps display
            'antibiotics': 'antibiotic_timestamp'
        }, # Optional: clinical event columns for time-to-event metrics
        aggregation_func="median", # Aggregation function for time-to-event (default: median)
-       decimal_places=3 # Evaluation rounding (optional)
+       decimal_places=3, # Evaluation rounding (optional)
+       # force_eval=True  # Uncomment if using >10 thresholds
    )
 
    # The 'results_table' will now contain dynamic columns for time-to-event metrics:

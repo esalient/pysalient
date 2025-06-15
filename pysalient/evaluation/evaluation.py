@@ -75,6 +75,7 @@ def evaluation(
     force_threshold_zero: bool = True,
     decimal_places: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
+    force_eval: bool = False,  # Force evaluation even if more than 10 thresholds
     #################
     # CI Parameters #
     #################
@@ -163,6 +164,9 @@ def evaluation(
                    - `<= -1`: Show INFO, WARNING, and ERROR level messages.
                    - `== 0`: Show WARNING and ERROR level messages (default).
                    - `>= 1`: Show only ERROR level messages (suppress warnings).
+        force_eval: If True, bypasses the threshold count check and forces evaluation
+                   even if more than 10 thresholds are specified. If False (default),
+                   raises a ValueError if more than 10 thresholds would be evaluated.
         calculate_au_ci: If True, calculate confidence intervals for Area Under Curve
                          metrics (AUROC, AUPRC) using the bootstrap method. Defaults to False.
         calculate_threshold_ci: If True, calculate confidence intervals for threshold-specific
@@ -448,6 +452,24 @@ def evaluation(
     ################################
     # 2. Parse/Generate Thresholds #
     ################################
+    try:
+        # First generate thresholds without forcing 0 to count user-specified thresholds only
+        user_threshold_list = _generate_thresholds(
+            thresholds, include_zero=False
+        )
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Invalid threshold specification: {e}") from e
+
+    # Check threshold count and enforce limit if force_eval is False
+    # Only count user-specified thresholds, not the forced 0 threshold
+    if len(user_threshold_list) > 10 and not force_eval:
+        raise ValueError(
+            f"Too many thresholds ({len(user_threshold_list)}) specified. "
+            f"Maximum allowed is 10 thresholds to prevent excessive computation. "
+            f"Use force_eval=True to bypass this check and evaluate all {len(user_threshold_list)} thresholds."
+        )
+
+    # Now generate the final threshold list including forced 0 if needed
     try:
         threshold_list = _generate_thresholds(
             thresholds, include_zero=force_threshold_zero

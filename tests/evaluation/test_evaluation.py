@@ -1508,3 +1508,164 @@ def test_evaluation_with_aggregation_differs_from_non_aggregation(
     pytest.skip(
         "Test no longer relevant - aggregation moved from evaluation.py to io.py"
     )
+
+
+########################################
+# Tests for force_eval parameter      #
+########################################
+
+
+def test_evaluation_force_eval_with_many_thresholds(synth_table_with_metadata):
+    """Test that force_eval=True allows evaluation with more than 10 thresholds."""
+    # Create a threshold list with more than 10 values
+    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    
+    # Should work with force_eval=True
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model", 
+        "test_filter",
+        many_thresholds,
+        force_eval=True
+    )
+    
+    # Should return results for all thresholds (plus 0.0 which is added by default)
+    expected_threshold_count = len(set([0.0] + many_thresholds))  # Remove duplicates and add 0.0
+    assert len(result) == expected_threshold_count
+    
+    # Verify all thresholds are present in results
+    result_thresholds = set(result['threshold'].to_pylist())
+    expected_thresholds = set([0.0] + many_thresholds)
+    assert result_thresholds == expected_thresholds
+
+
+def test_evaluation_force_eval_false_blocks_many_thresholds(synth_table_with_metadata):
+    """Test that force_eval=False (default) blocks evaluation with more than 10 thresholds."""
+    # Create a threshold list with more than 10 values
+    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    
+    # Should raise ValueError with force_eval=False (default)
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
+    ):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter", 
+            many_thresholds,
+            force_eval=False
+        )
+    
+    # Should also raise with default parameter (force_eval defaults to False)
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
+    ):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_thresholds
+        )
+
+
+def test_evaluation_force_eval_allows_exactly_10_thresholds(synth_table_with_metadata):
+    """Test that exactly 10 thresholds work without force_eval=True."""
+    # Create exactly 10 thresholds (plus 0.0 will be added, making 11 total, but we check before adding 0.0)
+    exactly_10_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    
+    # Should work without force_eval=True
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        exactly_10_thresholds
+    )
+    
+    # Should return results (0.0 added by default makes 11 total)
+    assert len(result) == 11  # 10 + 0.0
+
+
+def test_evaluation_force_eval_with_range_specification(synth_table_with_metadata):
+    """Test force_eval with range specification that generates many thresholds."""
+    # Create a range that generates more than 10 thresholds
+    # (0.0, 1.0, 0.05) should generate 21 thresholds: 0.0, 0.05, 0.10, ..., 1.0
+    many_threshold_range = (0.0, 1.0, 0.05)
+    
+    # Should raise without force_eval
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
+    ):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_threshold_range
+        )
+    
+    # Should work with force_eval=True
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter", 
+        many_threshold_range,
+        force_eval=True
+    )
+    
+    # Should return results for all generated thresholds
+    assert len(result) == 21  # 0.0, 0.05, 0.10, ..., 1.0
+
+
+def test_evaluation_force_eval_error_message_accuracy(synth_table_with_metadata):
+    """Test that the error message shows the correct threshold count."""
+    # Create 15 thresholds
+    threshold_list = [i * 0.05 for i in range(1, 16)]  # [0.05, 0.10, ..., 0.75]
+    
+    with pytest.raises(ValueError) as exc_info:
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            threshold_list
+        )
+    
+    error_msg = str(exc_info.value)
+    # Should mention the correct count (15 user-specified thresholds, forced 0 doesn't count)
+    assert "15" in error_msg  # 15 specified thresholds only
+    assert "force_eval=True" in error_msg
+    assert "Maximum allowed is 10" in error_msg
+
+
+def test_evaluation_force_eval_with_duplicates_counts_unique(synth_table_with_metadata):
+    """Test that threshold counting considers unique thresholds only."""
+    # Create list with duplicates that results in <= 10 unique thresholds
+    thresholds_with_duplicates = [0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6]
+    # Unique: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] = 6 unique + 0.0 = 7 total
+    
+    # Should work without force_eval since unique count <= 10
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        thresholds_with_duplicates
+    )
+    
+    # Should return results for unique thresholds only
+    assert len(result) == 7  # 6 unique + 0.0
+    
+    # Now test with duplicates that result in > 10 unique thresholds
+    many_thresholds_with_duplicates = [
+        0.1, 0.1, 0.15, 0.15, 0.2, 0.2, 0.25, 0.25, 0.3, 0.3,
+        0.35, 0.35, 0.4, 0.4, 0.45, 0.45, 0.5, 0.5, 0.55, 0.55, 0.6, 0.6
+    ]
+    # Unique: 11 thresholds + 0.0 = 12 total
+    
+    with pytest.raises(ValueError, match=r"Too many thresholds.*Use force_eval=True"):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_thresholds_with_duplicates
+        )
