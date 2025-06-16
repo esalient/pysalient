@@ -280,9 +280,6 @@ EXPECTED_SCHEMA_WITH_TIMESERIES = pa.schema(
         pa.field("modelid", pa.string()),
         pa.field("filter_desc", pa.string()),
         pa.field("threshold", pa.float64()),
-        # Time to First Alert (Added)
-        pa.field("time_to_first_alert_value", pa.float64()),  # Nullable float
-        pa.field("time_to_first_alert_unit", pa.string()),  # Nullable string
         # Overall Metrics
         pa.field("AUROC", pa.float64()),
         pa.field("AUROC_Lower_CI", pa.float64()),
@@ -1445,7 +1442,6 @@ def test_integration_evaluation_consumes_metadata_successfully(loaded_sample_dat
             modelid="integration_test_model",
             filter_desc="integration_test_run",
             thresholds=[0.1, 0.5, 0.9],
-            time_unit="hours",  # Required since event_timestamp is numeric
             calculate_au_ci=False,  # Use renamed param
             calculate_threshold_ci=False,
         )

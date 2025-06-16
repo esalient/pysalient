@@ -25,10 +25,12 @@ ANTIBIOTICS_EVENT_COL = "antibiotics_event"
 @pytest.fixture
 def base_metadata():
     """Base metadata required for evaluation."""
+    from pysalient.evaluation import META_KEY_TIMESERIES_COL
     return {
         META_KEY_Y_PROBA.encode("utf-8"): PROBA_COL.encode("utf-8"),
         META_KEY_Y_LABEL.encode("utf-8"): LABEL_COL.encode("utf-8"),
         META_KEY_AGGREGATION_COLS.encode("utf-8"): json.dumps([ENCOUNTER_COL]).encode("utf-8"),
+        META_KEY_TIMESERIES_COL.encode("utf-8"): TIMESERIES_COL.encode("utf-8"),
     }
 
 
@@ -174,14 +176,11 @@ class TestTimeToEventBackwardCompatibility:
         # Check that no time-to-event columns are present
         column_names = result.column_names
         for col in column_names:
-            assert "_hrs_from_first_alert_to_" not in col
+            assert "_from_first_alert_to_" not in col
             assert "count_first_alerts_before_" not in col
             assert "count_first_alerts_after_or_at_" not in col
-            assert "_hrs_first_alerts_after_or_at_" not in col
         
         # Should not have time-to-first-alert columns when timeseries_col is None
-        assert "time_to_first_alert_value" not in column_names
-        assert "time_to_first_alert_unit" not in column_names
     
     def test_evaluation_with_time_to_event_but_no_aggregation_metadata(self, time_to_event_data):
         """Test warning when time_to_event_cols provided but no aggregation metadata."""
@@ -202,12 +201,9 @@ class TestTimeToEventBackwardCompatibility:
         # Should not have time-to-event columns
         column_names = result.column_names
         for col in column_names:
-            assert "_hrs_from_first_alert_to_" not in col
-            assert "_hrs_first_alerts_after_or_at_" not in col
+            assert "_from_first_alert_to_" not in col
         
         # Should not have time-to-first-alert columns when timeseries_col is None
-        assert "time_to_first_alert_value" not in column_names
-        assert "time_to_first_alert_unit" not in column_names
 
 
 class TestTimeToEventBasicFunctionality:
@@ -218,17 +214,15 @@ class TestTimeToEventBasicFunctionality:
         result = evaluation(
             time_to_event_table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
             aggregation_func="median"
         )
         
         # Check schema includes new columns
         expected_columns = [
-            "median_hrs_from_first_alert_to_bc",
+            "median_hours_from_first_alert_to_bc",
             "count_first_alerts_before_bc", 
-            "count_first_alerts_after_or_at_bc",
-            "median_hrs_first_alerts_after_or_at_bc"
+            "count_first_alerts_after_or_at_bc"
         ]
         
         for col in expected_columns:
@@ -244,7 +238,7 @@ class TestTimeToEventBasicFunctionality:
         # After groupby max per encounter: [2, -2, 2]
         # Median: 2 hrs
         
-        assert result_dict["median_hrs_from_first_alert_to_bc"][0] == pytest.approx(2.0)
+        assert result_dict["median_hours_from_first_alert_to_bc"][0] == pytest.approx(2.0)
         assert result_dict["count_first_alerts_before_bc"][0] == 2  # 2 encounters with positive time
         assert result_dict["count_first_alerts_after_or_at_bc"][0] == 1  # 1 encounter with negative/zero time
     
@@ -253,7 +247,7 @@ class TestTimeToEventBasicFunctionality:
         result = evaluation(
             time_to_event_table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={
                 "bc": CULTURE_EVENT_COL,
                 "ab": ANTIBIOTICS_EVENT_COL
@@ -263,14 +257,12 @@ class TestTimeToEventBasicFunctionality:
         
         # Check schema includes columns for both events
         expected_columns = [
-            "median_hrs_from_first_alert_to_bc",
+            "median_hours_from_first_alert_to_bc",
             "count_first_alerts_before_bc",
             "count_first_alerts_after_or_at_bc",
-            "median_hrs_first_alerts_after_or_at_bc",
-            "median_hrs_from_first_alert_to_ab", 
+            "median_hours_from_first_alert_to_ab", 
             "count_first_alerts_before_ab",
             "count_first_alerts_after_or_at_ab",
-            "median_hrs_first_alerts_after_or_at_ab"
         ]
         
         for col in expected_columns:
@@ -279,8 +271,8 @@ class TestTimeToEventBasicFunctionality:
         result_dict = result.to_pydict()
         
         # Verify both events have metrics calculated
-        assert result_dict["median_hrs_from_first_alert_to_bc"][0] is not None
-        assert result_dict["median_hrs_from_first_alert_to_ab"][0] is not None
+        assert result_dict["median_hours_from_first_alert_to_bc"][0] is not None
+        assert result_dict["median_hours_from_first_alert_to_ab"][0] is not None
     
     def test_different_aggregation_functions(self, time_to_event_table):
         """Test different aggregation functions generate correct column names."""
@@ -288,15 +280,13 @@ class TestTimeToEventBasicFunctionality:
             result = evaluation(
                 time_to_event_table,
                 "model", "filter", [0.5],
-                timeseries_col=TIMESERIES_COL,
+                
                 time_to_event_cols={"bc": CULTURE_EVENT_COL},
                 aggregation_func=agg_func
             )
             
-            expected_col = f"{agg_func}_hrs_from_first_alert_to_bc"
-            expected_after_col = f"{agg_func}_hrs_first_alerts_after_or_at_bc"
+            expected_col = f"{agg_func}_hours_from_first_alert_to_bc"
             assert expected_col in result.column_names
-            assert expected_after_col in result.column_names
             
             # Count columns should remain the same regardless of aggregation function
             assert "count_first_alerts_before_bc" in result.column_names
@@ -322,7 +312,7 @@ class TestTimeToEventEdgeCases:
         result = evaluation(
             table,
             "model", "filter", [0.8],  # High threshold, no TPs since all probas < 0.5
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
             force_threshold_zero=False  # Don't include 0.0 threshold automatically
         )
@@ -330,7 +320,7 @@ class TestTimeToEventEdgeCases:
         result_dict = result.to_pydict()
         
         # Should have NaN for time metric and 0 for counts
-        assert np.isnan(result_dict["median_hrs_from_first_alert_to_bc"][0])
+        assert np.isnan(result_dict["median_hours_from_first_alert_to_bc"][0])
         assert result_dict["count_first_alerts_before_bc"][0] == 0
         assert result_dict["count_first_alerts_after_or_at_bc"][0] == 0
     
@@ -350,7 +340,7 @@ class TestTimeToEventEdgeCases:
         result = evaluation(
             table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL}
         )
         
@@ -376,7 +366,7 @@ class TestTimeToEventEdgeCases:
         result = evaluation(
             table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL}
         )
         
@@ -410,7 +400,7 @@ class TestTimeToEventIntegration:
         result = evaluation(
             time_to_event_table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
             decimal_places=2
         )
@@ -418,7 +408,7 @@ class TestTimeToEventIntegration:
         result_dict = result.to_pydict()
         
         # Time metric should be rounded, count metrics should not be
-        time_value = result_dict["median_hrs_from_first_alert_to_bc"][0]
+        time_value = result_dict["median_hours_from_first_alert_to_bc"][0]
         assert isinstance(time_value, float)
         # Check that it's rounded to 2 decimal places
         assert time_value == round(time_value, 2)
@@ -430,7 +420,7 @@ class TestTimeToEventIntegration:
         result = evaluation(
             time_to_event_table,
             "model", "filter", thresholds,
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL}
         )
         
@@ -440,7 +430,7 @@ class TestTimeToEventIntegration:
         
         # Each threshold should have time-to-event metrics
         for i in range(len(thresholds)):
-            assert "median_hrs_from_first_alert_to_bc" in result_dict
+            assert "median_hours_from_first_alert_to_bc" in result_dict
             # Values may be different for each threshold based on true positives
     
     def test_confidence_intervals_with_time_to_event(self, time_to_event_table):
@@ -448,7 +438,7 @@ class TestTimeToEventIntegration:
         result = evaluation(
             time_to_event_table,
             "model", "filter", [0.5],
-            timeseries_col=TIMESERIES_COL,
+            
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
             calculate_threshold_ci=True,
             bootstrap_rounds=100  # Small number for fast test
@@ -462,5 +452,5 @@ class TestTimeToEventIntegration:
         assert "PPV_Upper_CI" in column_names
         
         # Check time-to-event columns exist
-        assert "median_hrs_from_first_alert_to_bc" in column_names
+        assert "median_hours_from_first_alert_to_bc" in column_names
         assert "count_first_alerts_before_bc" in column_names

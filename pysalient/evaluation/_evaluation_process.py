@@ -159,7 +159,9 @@ def _process_single_evaluation(
                     if timeseries_col_bytes is not None:
                         timeseries_col_from_metadata = timeseries_col_bytes.decode("utf-8")
                         if timeseries_col_from_metadata in data.column_names:
-                            alert_timestamps_array = data[timeseries_col_from_metadata].to_numpy()
+                            timeseries_column = data[timeseries_col_from_metadata]
+                            alert_timestamps_array = timeseries_column.to_numpy()
+                            timeseries_pa_type = timeseries_column.type
                         else:
                             raise ValueError(f"Timeseries column '{timeseries_col_from_metadata}' from metadata not found in table")
                     else:
@@ -637,10 +639,9 @@ def _process_single_evaluation(
                             agg_time_after_or_at = np.nan
                         
                         # Store results
-                        time_to_event_metrics[f"{aggregation_func}_hrs_from_first_alert_to_{event_key}"] = agg_time
+                        time_to_event_metrics[f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}"] = agg_time
                         time_to_event_metrics[f"count_first_alerts_before_{event_key}"] = count_before
                         time_to_event_metrics[f"count_first_alerts_after_or_at_{event_key}"] = count_after_or_at
-                        time_to_event_metrics[f"{aggregation_func}_hrs_first_alerts_after_or_at_{event_key}"] = agg_time_after_or_at
                         
                     except Exception as e:
                         # Log warning and set NaN/0 values for this event
@@ -648,17 +649,15 @@ def _process_single_evaluation(
                             f"Time-to-event calculation failed for event '{event_key}' at threshold {threshold}: {e}",
                             RuntimeWarning
                         )
-                        time_to_event_metrics[f"{aggregation_func}_hrs_from_first_alert_to_{event_key}"] = np.nan
+                        time_to_event_metrics[f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}"] = np.nan
                         time_to_event_metrics[f"count_first_alerts_before_{event_key}"] = 0
                         time_to_event_metrics[f"count_first_alerts_after_or_at_{event_key}"] = 0
-                        time_to_event_metrics[f"{aggregation_func}_hrs_first_alerts_after_or_at_{event_key}"] = np.nan
             else:
                 # No true positives at this threshold - set all metrics to NaN/0
                 for event_key in time_to_event_cols.keys():
-                    time_to_event_metrics[f"{aggregation_func}_hrs_from_first_alert_to_{event_key}"] = np.nan
+                    time_to_event_metrics[f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}"] = np.nan
                     time_to_event_metrics[f"count_first_alerts_before_{event_key}"] = 0
                     time_to_event_metrics[f"count_first_alerts_after_or_at_{event_key}"] = 0
-                    time_to_event_metrics[f"{aggregation_func}_hrs_first_alerts_after_or_at_{event_key}"] = np.nan
 
         # Calculate Time to First Alert for this threshold
         time_to_first_alert_value: float | None = None
@@ -772,7 +771,7 @@ def _process_single_evaluation(
             if decimal_places is not None:
                 rounded_time_to_event_metrics = {}
                 for key, value in time_to_event_metrics.items():
-                    if "_hrs_from_first_alert_to_" in key or "_hrs_first_alerts_after_or_at_" in key:
+                    if "_from_first_alert_to_" in key:
                         # This is a time metric (float) - round it
                         rounded_time_to_event_metrics[key] = _safe_round(value, decimal_places)
                     else:
@@ -786,7 +785,7 @@ def _process_single_evaluation(
             if time_to_event_fillna is not None:
                 fillna_time_to_event_metrics = {}
                 for key, value in final_time_to_event_metrics.items():
-                    if ("_hrs_from_first_alert_to_" in key or "_hrs_first_alerts_after_or_at_" in key) and (value is None or (isinstance(value, float) and np.isnan(value))):
+                    if ("_from_first_alert_to_" in key) and (value is None or (isinstance(value, float) and np.isnan(value))):
                         # This is a time metric with NaN/None - fill it
                         fillna_time_to_event_metrics[key] = time_to_event_fillna
                     else:

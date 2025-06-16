@@ -98,7 +98,6 @@ The primary function currently is `format_evaluation_table`, which helps display
        y_proba_col=col_map['y_proba'],
        y_label_col=col_map['y_label'],
        aggregation_cols=col_map['agg'],
-       timeseries_col=col_map['time'],
        assign_task_name="AKI",
        assign_model_name="LogRegress",
        perform_aggregation=True,  # Enable aggregation by encounter
@@ -106,30 +105,27 @@ The primary function currently is `format_evaluation_table`, which helps display
    )
 
    # --- Run evaluation ---
-   # Note: 'assigned_table' was loaded with 'timeseries_col' set to 'event_timestamp'.
-   # The 'evaluation' function will use this along with the new time-to-event parameters.
+   # The 'evaluation' function will use the time-to-event parameters.
    results_table = eval.evaluation(
        data=assigned_table,
        modelid="BaselineLogisticRegression",
        filter_desc="placeholder_filter",
        thresholds=(0.1, 0.9, 0.1),  # This generates 9 thresholds, within the default limit
-       timeseries_col=col_map['time'], # Alert timestamps for time-to-first-alert
-       time_unit="hours", # Required when timeseries_col is numeric
        time_to_event_cols={
            'culture': 'blood_culture_timestamp',
            'antibiotics': 'antibiotic_timestamp'
        }, # Optional: clinical event columns for time-to-event metrics
        aggregation_func="median", # Aggregation function for time-to-event (default: median)
+       time_unit="hours", # Unit label for time-to-event column names (default: hours)
        decimal_places=3, # Evaluation rounding (optional)
        # force_eval=True  # Uncomment if using >10 thresholds
    )
 
    # The 'results_table' will now contain dynamic columns for time-to-event metrics:
-   # - 'median_hrs_from_first_alert_to_culture' (or other aggregation function)
+   # - 'median_hours_from_first_alert_to_culture' (or other aggregation function and time unit)
    # - 'count_first_alerts_before_culture' 
    # - 'count_first_alerts_after_or_at_culture'
-   # - Similar columns for 'antibiotics' 
-   # - Standard 'time_to_first_alert_value' for when model first exceeds threshold
+   # - Similar columns for 'antibiotics'
 
    # --- Format for display ---
    # Use the helper to format float columns (e.g., to 3 decimal places)
