@@ -167,3 +167,5 @@ scratch
 
 # uv
 uv.lock
+
+data/
