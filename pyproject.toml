@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pysalient"
-version = "0.1.0"
+version = "0.0.1"
 description = "pySALIENT: Python implementation of the SALIENT framework to assist with clinical AI research and implementation"
 readme = "README.md"
 requires-python = ">=3.11" # Adjust if you need a different minimum version
@@ -27,7 +27,7 @@ dependencies = [
     "pyarrow",
     "numpy",
     "pandas",
-    "scikit-learn" # Added for evaluation metrics
+    "scikit-learn" 
 ]
 
 [project.optional-dependencies]
@@ -36,12 +36,14 @@ dev = [
     "mypy",
     "myst-parser",
     "pytest",
-    "pytest-cov", # Added for code coverage
+    "pytest-cov", 
     "ruff",
     "sphinx",
     "pandas",
     "pyarrow",
-    "pydantic"
+    "pydantic",
+    "scikit-learn",
+    "jinja2"
 ]
 examples = [
     "ipykernel",
@@ -49,7 +51,7 @@ examples = [
 ]
 
   plot = [
-      "matplotlib", # Added for plotting ROC/PRC curves
+      "matplotlib",
   ]
 
 [project.urls]
@@ -59,7 +61,6 @@ Repository = "https://github.com/esalient/pysalient"
 # --- Tool Configurations ---
 
 [tool.ruff]
-# Exclude specific directories if necessary (e.g., virtualenvs)
 exclude = [
     ".bzr",
     ".direnv",
@@ -88,8 +89,6 @@ line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
-# Enable Pyflakes, Pycodestyle, isort, Pyupgrade, Naming conventions etc.
-# See https://docs.astral.sh/ruff/rules/ for all rules
 select = ["E", "F", "W", "I", "N", "UP"]
 ignore = ["E501"] # Ignore line too long errors
 
