@@ -9,6 +9,8 @@
 
 Python implementation of the SALIENT framework to 
 assist with clinical AI research and implementation.
+
+**⚠️ ALPHA VERSION - This library is currently in early development and not in fully working form. Use with caution.**
 </div>
 
 ## Development
