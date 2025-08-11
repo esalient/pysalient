@@ -423,6 +423,17 @@ def evaluation(
             for event_key, event_col in time_to_event_cols.items():
                 if event_col not in data.column_names:
                     raise ValueError(f"Time-to-event column '{event_col}' (for key '{event_key}') not found in table.")
+            
+            # Validate that time_to_event_cols contain timestamp columns
+            for event_key, event_col in time_to_event_cols.items():
+                col_type = data[event_col].type
+                if not pa.types.is_temporal(col_type):
+                    warnings.warn(
+                        f"time_to_event_cols['{event_key}'] = '{event_col}' is not a timestamp column "
+                        f"(found {col_type}). Expected timestamp column for time calculations. "
+                        f"This may cause calculation failures.",
+                        UserWarning
+                    )
 
             # Check that aggregation column exists
             if aggregation_cols not in data.column_names:

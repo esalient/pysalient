@@ -614,22 +614,77 @@ def _process_single_evaluation(
                         
                         for enc_id in unique_encounters:
                             enc_mask = tp_encounter_ids == enc_id
-                            max_time = np.max(time_diffs[enc_mask])
+                            enc_time_diffs = time_diffs[enc_mask]
+                            # Use nanmax to handle NaN values like Pandas .max() does
+                            max_time = np.nanmax(enc_time_diffs)
                             encounter_max_times.append(max_time)
                         
                         encounter_max_times = np.array(encounter_max_times)
                         
-                        # Apply aggregation function across encounters
-                        agg_func = getattr(np, aggregation_func)
+                        # Apply NaN-aware aggregation function across encounters to match Pandas behavior
                         if len(encounter_max_times) > 0:
-                            agg_time = agg_func(encounter_max_times)
-                            count_before = np.sum(encounter_max_times > 0)
-                            count_after_or_at = np.sum(encounter_max_times <= 0)
+                            # Use NaN-aware version of aggregation function to match Pandas behavior
+                            if aggregation_func == 'median':
+                                agg_time = np.nanmedian(encounter_max_times)
+                            elif aggregation_func == 'mean':
+                                agg_time = np.nanmean(encounter_max_times)
+                            elif aggregation_func == 'min':
+                                agg_time = np.nanmin(encounter_max_times)
+                            elif aggregation_func == 'max':
+                                agg_time = np.nanmax(encounter_max_times)
+                            elif aggregation_func == 'std':
+                                agg_time = np.nanstd(encounter_max_times)
+                            elif aggregation_func == 'var':
+                                agg_time = np.nanvar(encounter_max_times)
+                            else:
+                                # For other functions, try nan version first, fallback to regular
+                                nan_func_name = f'nan{aggregation_func}'
+                                if hasattr(np, nan_func_name):
+                                    nan_agg_func = getattr(np, nan_func_name)
+                                    agg_time = nan_agg_func(encounter_max_times)
+                                else:
+                                    # Fallback: filter out NaN values manually then use regular function
+                                    valid_times = encounter_max_times[~np.isnan(encounter_max_times)]
+                                    if len(valid_times) > 0:
+                                        agg_func = getattr(np, aggregation_func)
+                                        agg_time = agg_func(valid_times)
+                                    else:
+                                        agg_time = np.nan
+                            # Count encounters properly, excluding NaN values 
+                            valid_times = encounter_max_times[~np.isnan(encounter_max_times)]
+                            count_before = np.sum(valid_times > 0)
+                            count_after_or_at = np.sum(valid_times <= 0)
                             
                             # Calculate aggregation for only alerts after or at event time
                             after_or_at_times = encounter_max_times[encounter_max_times <= 0]
                             if len(after_or_at_times) > 0:
-                                agg_time_after_or_at = agg_func(after_or_at_times)
+                                # Apply same NaN-aware logic for after/at times
+                                if aggregation_func == 'median':
+                                    agg_time_after_or_at = np.nanmedian(after_or_at_times)
+                                elif aggregation_func == 'mean':
+                                    agg_time_after_or_at = np.nanmean(after_or_at_times)
+                                elif aggregation_func == 'min':
+                                    agg_time_after_or_at = np.nanmin(after_or_at_times)
+                                elif aggregation_func == 'max':
+                                    agg_time_after_or_at = np.nanmax(after_or_at_times)
+                                elif aggregation_func == 'std':
+                                    agg_time_after_or_at = np.nanstd(after_or_at_times)
+                                elif aggregation_func == 'var':
+                                    agg_time_after_or_at = np.nanvar(after_or_at_times)
+                                else:
+                                    # For other functions, try nan version first, fallback to regular
+                                    nan_func_name = f'nan{aggregation_func}'
+                                    if hasattr(np, nan_func_name):
+                                        nan_agg_func = getattr(np, nan_func_name)
+                                        agg_time_after_or_at = nan_agg_func(after_or_at_times)
+                                    else:
+                                        # Fallback: filter out NaN values manually then use regular function
+                                        valid_times = after_or_at_times[~np.isnan(after_or_at_times)]
+                                        if len(valid_times) > 0:
+                                            agg_func = getattr(np, aggregation_func)
+                                            agg_time_after_or_at = agg_func(valid_times)
+                                        else:
+                                            agg_time_after_or_at = np.nan
                             else:
                                 agg_time_after_or_at = np.nan
                         else:
