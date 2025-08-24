@@ -58,6 +58,7 @@ def format_evaluation_table(
     decimal_places: int | None = 3,
     float_columns: list[str] | None = None,
     ci_column: bool = True,  # Added parameter
+    order_by: str | list[str] | None = "threshold",  # Added parameter
 ) -> Styler:
     """
     Converts an evaluation result PyArrow Table to a styled Pandas DataFrame
@@ -74,13 +75,17 @@ def format_evaluation_table(
         ci_column: If True (default), display confidence intervals in a separate
                    '{Metric} CI' column. If False, integrate the CI into the
                    main metric column as a string like 'value [lower - upper]'.
+        order_by: Column name(s) to sort the DataFrame by before styling.
+                  Can be a single column name (str) or list of column names (list[str]).
+                  If None, no sorting is applied. Defaults to "threshold" to sort by threshold values.
 
     Returns:
         A pandas Styler object ready for display in environments like Jupyter.
 
     Raises:
-        TypeError: If the input 'table' is not a PyArrow Table.
-        ValueError: If 'decimal_places' is invalid.
+        TypeError: If the input 'table' is not a PyArrow Table, or if 'order_by' is not a string/list.
+        ValueError: If 'decimal_places' is invalid, or if 'order_by' columns don't exist in the table.
+        RuntimeError: If DataFrame conversion or sorting fails.
     """
     if not isinstance(table, pa.Table):
         raise TypeError("Input 'table' must be a PyArrow Table.")
@@ -91,6 +96,26 @@ def format_evaluation_table(
         raise RuntimeError(
             f"Failed to convert PyArrow Table to Pandas DataFrame: {e}"
         ) from e
+
+    # Apply sorting if order_by is specified
+    if order_by is not None:
+        try:
+            if isinstance(order_by, str):
+                # Single column
+                if order_by in df.columns:
+                    df = df.sort_values(by=order_by).reset_index(drop=True)
+                else:
+                    raise ValueError(f"Column '{order_by}' not found in table. Available columns: {df.columns.tolist()}")
+            elif isinstance(order_by, list):
+                # Multiple columns
+                missing_cols = [col for col in order_by if col not in df.columns]
+                if missing_cols:
+                    raise ValueError(f"Columns {missing_cols} not found in table. Available columns: {df.columns.tolist()}")
+                df = df.sort_values(by=order_by).reset_index(drop=True)
+            else:
+                raise TypeError("'order_by' must be a string, list of strings, or None.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to sort DataFrame by '{order_by}': {e}") from e
 
     if decimal_places is None:
         # Return unformatted Styler if no rounding needed
@@ -201,6 +226,13 @@ def format_evaluation_table(
         potential_cols = [col for col in DEFAULT_FLOAT_COLS if col in df.columns]
         # Start with potential default float columns
         cols_to_format_set = set(potential_cols)
+
+        # Dynamically add time-to-event columns (they have specific naming pattern)
+        for col in df.columns:
+            if ("_from_first_alert_to_" in col and
+                not col.startswith("count_")):  # Exclude count columns (integers)
+                cols_to_format_set.add(col)
+
         # Add original metrics found, ONLY if ci_column is True (otherwise they are strings)
         if ci_column:
             cols_to_format_set.update(original_metric_cols_found)

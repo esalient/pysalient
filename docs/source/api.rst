@@ -21,6 +21,47 @@ Evaluation Module
 .. automodule:: pysalient.evaluation
    :members:
 
+Time-to-Event Metrics
+^^^^^^^^^^^^^^^^^^^^^
+
+The evaluation module now supports calculating time-to-event metrics for clinical events. 
+These metrics calculate the time from model alerts to clinical events for true positives only, 
+aggregated at the encounter level.
+
+Key parameters for time-to-event functionality:
+
+- ``time_to_event_cols``: Dictionary mapping metric names to clinical event column names
+- ``aggregation_func``: Aggregation function for encounter-level aggregation (default: "median")
+
+For detailed parameter documentation and examples, see the :func:`pysalient.evaluation.evaluation` function docstring.
+
+Performance and Safety Controls
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The evaluation function includes safety controls to prevent accidental execution of computationally expensive evaluations:
+
+- **Threshold Limit**: By default, evaluation is limited to 10 thresholds to prevent excessive computation
+- **Override Control**: Use ``force_eval=True`` to bypass the limit when needed for comprehensive analysis
+
+.. warning::
+   Evaluating many thresholds (>10) can be computationally expensive, especially with confidence interval calculations enabled. Use ``force_eval=True`` carefully and consider the computational cost.
+
+Example with many thresholds:
+
+.. code-block:: python
+
+   # This will raise an error by default
+   try:
+       results = eval.evaluation(data, "model", "filter", 
+                               thresholds=np.linspace(0, 1, 50))  # 50 thresholds
+   except ValueError as e:
+       print(f"Error: {e}")
+   
+   # Override the safety check
+   results = eval.evaluation(data, "model", "filter", 
+                           thresholds=np.linspace(0, 1, 50),
+                           force_eval=True)  # Allows 50 thresholds
+
 
 Visualisation and Display Helpers
 ---------------------------------
@@ -57,7 +98,6 @@ The primary function currently is `format_evaluation_table`, which helps display
        y_proba_col=col_map['y_proba'],
        y_label_col=col_map['y_label'],
        aggregation_cols=col_map['agg'],
-       timeseries_col=col_map['time'],
        assign_task_name="AKI",
        assign_model_name="LogRegress",
        perform_aggregation=True,  # Enable aggregation by encounter
@@ -65,26 +105,27 @@ The primary function currently is `format_evaluation_table`, which helps display
    )
 
    # --- Run evaluation ---
-   # Note: 'assigned_table' was loaded with 'timeseries_col' set to 'event_timestamp'.
-   # The 'evaluation' function will use this along with the new event timing parameters.
+   # The 'evaluation' function will use the time-to-event parameters.
    results_table = eval.evaluation(
        data=assigned_table,
        modelid="BaselineLogisticRegression",
        filter_desc="placeholder_filter",
-       thresholds=(0.1, 0.9, 0.1),
-       timeseries_col=col_map['time'], # Explicitly pass, matches what load_evaluation_data uses
-       time_unit="hours", # Global unit for all time-to-event calculations.
-                          # Mandatory if 'timeseries_col' is provided and event timing is performed.
-       event_columns_for_timing=['some_binary_event_column'], # Example event column
-       # event_column_time_units has been removed.
-       decimal_places=3 # Evaluation rounding (optional)
+       thresholds=(0.1, 0.9, 0.1),  # This generates 9 thresholds, within the default limit
+       time_to_event_cols={
+           'culture': 'blood_culture_timestamp',
+           'antibiotics': 'antibiotic_timestamp'
+       }, # Optional: clinical event columns for time-to-event metrics
+       aggregation_func="median", # Aggregation function for time-to-event (default: median)
+       time_unit="hour", # Unit label for time-to-event column names (default: hour)
+       decimal_places=3, # Evaluation rounding (optional)
+       # force_eval=True  # Uncomment if using >10 thresholds
    )
 
-   # The 'results_table' will now contain dynamic columns such as
-   # 'time_to_first_some_binary_event_column_value' for each event specified
-   # in 'event_columns_for_timing', and a single shared 'time_to_event_units' column
-   # populated with the global 'time_unit' (e.g., "hours").
-   # Legacy 'time_to_first_alert_value' may also be present if applicable.
+   # The 'results_table' will now contain dynamic columns for time-to-event metrics:
+   # - 'median_hour_from_first_alert_to_culture' (or other aggregation function and time unit)
+   # - 'count_first_alerts_before_culture' 
+   # - 'count_first_alerts_after_or_at_culture'
+   # - Similar columns for 'antibiotics'
 
    # --- Format for display ---
    # Use the helper to format float columns (e.g., to 3 decimal places)

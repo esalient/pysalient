@@ -63,7 +63,6 @@ Repository = "https://github.com/esalient/pysalient"
 ########################
 
 [tool.ruff]
-# Exclude specific directories if necessary (e.g., virtualenvs)
 exclude = [
     ".bzr",
     ".direnv",

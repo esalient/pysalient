@@ -34,7 +34,7 @@ SYNTH_LABEL_COL = "synth_labels"
 SAMPLE_DATA_PATH = os.path.join("tests", "test_data", "anonymised_sample.parquet")
 # Column map based on the notebook's inspection (adjust if file changes)
 SAMPLE_COL_MAP = {
-    "y_proba": "prediction_probability",
+    "y_proba": "prediction_proba_1",
     "y_label": "true_label",
     "agg": "encounter_id",
     "time": "event_timestamp",
@@ -231,15 +231,12 @@ def test_generate_thresholds_invalid(spec, error_type):
 # Tests for evaluation #
 ########################
 
-# Define expected schema including all CI columns
-EXPECTED_SCHEMA_FULL = pa.schema(
+# Define expected schema without time-to-first-alert columns (for tests without timeseries_col)
+EXPECTED_SCHEMA_BASE = pa.schema(
     [
         pa.field("modelid", pa.string()),
         pa.field("filter_desc", pa.string()),
         pa.field("threshold", pa.float64()),
-        # Time to First Alert (Added)
-        pa.field("time_to_first_alert_value", pa.float64()),  # Nullable float
-        pa.field("time_to_first_alert_unit", pa.string()),  # Nullable string
         # Overall Metrics
         pa.field("AUROC", pa.float64()),
         pa.field("AUROC_Lower_CI", pa.float64()),
@@ -277,6 +274,52 @@ EXPECTED_SCHEMA_FULL = pa.schema(
     ]
 )
 
+# Define expected schema including time-to-first-alert columns (for tests with timeseries_col)
+EXPECTED_SCHEMA_WITH_TIMESERIES = pa.schema(
+    [
+        pa.field("modelid", pa.string()),
+        pa.field("filter_desc", pa.string()),
+        pa.field("threshold", pa.float64()),
+        # Overall Metrics
+        pa.field("AUROC", pa.float64()),
+        pa.field("AUROC_Lower_CI", pa.float64()),
+        pa.field("AUROC_Upper_CI", pa.float64()),
+        pa.field("AUPRC", pa.float64()),
+        pa.field("AUPRC_Lower_CI", pa.float64()),
+        pa.field("AUPRC_Upper_CI", pa.float64()),
+        pa.field("Prevalence", pa.float64()),
+        pa.field("Sample_Size", pa.int64()),
+        pa.field("Label_Count", pa.int64()),
+        # Confusion Matrix
+        pa.field("TP", pa.int64()),
+        pa.field("TN", pa.int64()),
+        pa.field("FP", pa.int64()),
+        pa.field("FN", pa.int64()),
+        # Threshold Metrics + CIs
+        pa.field("PPV", pa.float64()),
+        pa.field("PPV_Lower_CI", pa.float64()),
+        pa.field("PPV_Upper_CI", pa.float64()),
+        pa.field("Sensitivity", pa.float64()),
+        pa.field("Sensitivity_Lower_CI", pa.float64()),
+        pa.field("Sensitivity_Upper_CI", pa.float64()),
+        pa.field("Specificity", pa.float64()),
+        pa.field("Specificity_Lower_CI", pa.float64()),
+        pa.field("Specificity_Upper_CI", pa.float64()),
+        pa.field("NPV", pa.float64()),
+        pa.field("NPV_Lower_CI", pa.float64()),
+        pa.field("NPV_Upper_CI", pa.float64()),
+        pa.field("Accuracy", pa.float64()),
+        pa.field("Accuracy_Lower_CI", pa.float64()),
+        pa.field("Accuracy_Upper_CI", pa.float64()),
+        pa.field("F1_Score", pa.float64()),
+        pa.field("F1_Score_Lower_CI", pa.float64()),
+        pa.field("F1_Score_Upper_CI", pa.float64()),
+    ]
+)
+
+# For backward compatibility, use the base schema as the default
+EXPECTED_SCHEMA_BASE = EXPECTED_SCHEMA_BASE
+
 # Define lists of CI columns for easier checking
 OVERALL_CI_COLS = [
     "AUROC_Lower_CI",
@@ -310,7 +353,7 @@ def test_evaluation_basic(synth_table_with_metadata):
 
     # Manually calculate expected values for synth_data_basic
     expected_auroc = 0.9375
-    expected_auprc = 0.95
+    expected_auprc = 0.94375  # Updated to use precision_recall_curve + auc method (corrected calculation)
     expected_prevalence = 4 / 8
     expected_sample_size = 8
     expected_label_count = 4
@@ -364,8 +407,8 @@ def test_evaluation_basic(synth_table_with_metadata):
     results = evaluation(table, modelid, filter_desc, thresholds)  # Use direct import
 
     assert isinstance(results, pa.Table)
-    # Check against the full schema (now includes all CI columns)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    # Check against the base schema (without time-to-first-alert columns since timeseries_col=None)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows == len(expected_rows)
 
     results_dict = results.to_pydict()
@@ -403,7 +446,7 @@ def test_evaluation_rounding(synth_table_with_metadata):
     decimal_places_to_test = 2
 
     expected_auroc = round(0.9375, decimal_places_to_test)  # 0.94
-    expected_auprc = round(0.95, decimal_places_to_test)  # 0.95
+    expected_auprc = round(0.94375, decimal_places_to_test)  # 0.94 (updated to corrected calculation)
     expected_prevalence = round(4 / 8, decimal_places_to_test)  # 0.50
 
     expected_rows = [
@@ -446,8 +489,8 @@ def test_evaluation_rounding(synth_table_with_metadata):
 
     assert isinstance(results, pa.Table)
     assert results.schema.equals(
-        EXPECTED_SCHEMA_FULL, check_metadata=False
-    )  # Use full schema
+        EXPECTED_SCHEMA_BASE, check_metadata=False
+    )  # Use base schema since timeseries_col=None
     assert results.num_rows == len(expected_rows)
 
     results_dict = results.to_pydict()
@@ -814,7 +857,7 @@ def test_evaluation_with_au_ci_basic(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect 2 rows: 0.0 (default) + 0.5
     assert results.num_rows == 2
 
@@ -878,8 +921,8 @@ def test_evaluation_with_au_ci_reproducibility(synth_table_larger_with_metadata)
         bootstrap_seed=seed,
     )
 
-    assert results1.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results2.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results1.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results2.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
 
     results1_dict = results1.to_pydict()
     results2_dict = results2.to_pydict()
@@ -925,8 +968,8 @@ def test_evaluation_with_au_ci_different_alpha(synth_table_larger_with_metadata)
 
     assert isinstance(results_90, pa.Table)
     assert isinstance(results_99, pa.Table)
-    assert results_90.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results_99.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results_90.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results_99.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
 
     results_90_dict = results_90.to_pydict()
     results_99_dict = results_99.to_pydict()
@@ -981,7 +1024,7 @@ def test_evaluation_with_au_ci_and_rounding(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows > 0
 
     results_dict = results.to_pydict()
@@ -1054,7 +1097,7 @@ def test_evaluation_with_threshold_ci_basic(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect len(thresholds) + 1 rows due to default 0.0 threshold
     assert results.num_rows == len(thresholds) + 1
 
@@ -1130,8 +1173,8 @@ def test_evaluation_with_threshold_ci_reproducibility(synth_table_larger_with_me
         bootstrap_seed=seed,
     )
 
-    assert results1.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
-    assert results2.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results1.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
+    assert results2.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results1.num_rows == results2.num_rows
 
     results1_dict = results1.to_pydict()
@@ -1174,7 +1217,7 @@ def test_evaluation_with_threshold_ci_and_rounding(synth_table_larger_with_metad
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows > 0
 
     results_dict = results.to_pydict()
@@ -1221,7 +1264,7 @@ def test_evaluation_with_both_cis(synth_table_larger_with_metadata):
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     # Expect len(thresholds) + 1 rows due to default 0.0 threshold
     assert results.num_rows == len(thresholds) + 1
 
@@ -1294,7 +1337,7 @@ def test_evaluation_with_analytical_threshold_ci(
     )
 
     assert isinstance(results, pa.Table)
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_BASE, check_metadata=False)
     assert results.num_rows == len(thresholds) + 1  # Includes default 0.0 threshold
 
     results_dict = results.to_pydict()
@@ -1408,7 +1451,7 @@ def test_integration_evaluation_consumes_metadata_successfully(loaded_sample_dat
     assert isinstance(results, pa.Table)
     # Expect 4 rows: 0.0 (default) + 0.1, 0.5, 0.9
     assert results.num_rows == 4
-    assert results.schema.equals(EXPECTED_SCHEMA_FULL, check_metadata=False)
+    assert results.schema.equals(EXPECTED_SCHEMA_WITH_TIMESERIES, check_metadata=False)
 
     # Basic checks on results
     results_dict = results.to_pydict()
@@ -1461,3 +1504,171 @@ def test_evaluation_with_aggregation_differs_from_non_aggregation(
     pytest.skip(
         "Test no longer relevant - aggregation moved from evaluation.py to io.py"
     )
+
+
+########################################
+# Tests for force_eval parameter      #
+########################################
+
+
+def test_evaluation_force_eval_with_many_thresholds(synth_table_with_metadata):
+    """Test that force_eval=True allows evaluation with more than 10 thresholds."""
+    # Create a threshold list with more than 10 values
+    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+
+    # Should work with force_eval=True
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        many_thresholds,
+        force_eval=True
+    )
+
+    # Should return results for all thresholds (plus 0.0 which is added by default)
+    expected_threshold_count = len(set([0.0] + many_thresholds))  # Remove duplicates and add 0.0
+    assert len(result) == expected_threshold_count
+
+    # Verify all thresholds are present in results
+    result_thresholds = set(result['threshold'].to_pylist())
+    expected_thresholds = set([0.0] + many_thresholds)
+    assert result_thresholds == expected_thresholds
+
+
+def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(synth_table_with_metadata):
+    """Test that force_eval=False blocks evaluation with >10 thresholds when CI calculations are enabled."""
+    # Create a threshold list with more than 10 values
+    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+
+    # Should raise ValueError with CI enabled and force_eval=False (default)
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
+    ):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_thresholds,
+            calculate_threshold_ci=True,  # CI enabled - should trigger limit
+            force_eval=False
+        )
+
+    # Should work fine without CI enabled (new behavior)
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        many_thresholds,
+        calculate_threshold_ci=False  # No CI - should allow many thresholds
+    )
+    assert result.num_rows == len(many_thresholds) + 1  # +1 for automatic 0.0
+
+
+def test_evaluation_force_eval_allows_exactly_10_thresholds(synth_table_with_metadata):
+    """Test that exactly 10 thresholds work without force_eval=True."""
+    # Create exactly 10 thresholds (plus 0.0 will be added, making 11 total, but we check before adding 0.0)
+    exactly_10_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+    # Should work without force_eval=True
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        exactly_10_thresholds
+    )
+
+    # Should return results (0.0 added by default makes 11 total)
+    assert len(result) == 11  # 10 + 0.0
+
+
+def test_evaluation_force_eval_with_range_specification_and_ci(synth_table_with_metadata):
+    """Test force_eval with range specification that generates many thresholds when CI is enabled."""
+    # Create a range that generates more than 10 thresholds
+    # (0.0, 1.0, 0.05) should generate 21 thresholds: 0.0, 0.05, 0.10, ..., 1.0
+    many_threshold_range = (0.0, 1.0, 0.05)
+
+    # Should raise without force_eval when CI is enabled
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
+    ):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_threshold_range,
+            calculate_au_ci=True  # CI enabled - should trigger limit
+        )
+
+    # Should work with force_eval=True even with CI
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        many_threshold_range,
+        calculate_au_ci=True,
+        force_eval=True,
+        bootstrap_rounds=100  # Reduce for faster test
+    )
+
+    # Should return results for all generated thresholds
+    assert len(result) == 21  # 0.0, 0.05, 0.10, ..., 1.0
+
+
+def test_evaluation_force_eval_error_message_accuracy_with_ci(synth_table_with_metadata):
+    """Test that the error message shows the correct threshold count when CI is enabled."""
+    # Create 15 thresholds
+    threshold_list = [i * 0.05 for i in range(1, 16)]  # [0.05, 0.10, ..., 0.75]
+
+    with pytest.raises(ValueError) as exc_info:
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            threshold_list,
+            calculate_au_ci=True  # Enable CI to trigger the limit
+        )
+
+    error_msg = str(exc_info.value)
+    # Should mention the correct count (15 user-specified thresholds, forced 0 doesn't count)
+    assert "15" in error_msg  # 15 specified thresholds only
+    assert "force_eval=True" in error_msg
+    assert "Maximum allowed is 10" in error_msg
+    assert "CI calculations enabled" in error_msg
+
+
+def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(synth_table_with_metadata):
+    """Test that threshold counting considers unique thresholds only when CI is enabled."""
+    # Create list with duplicates that results in <= 10 unique thresholds
+    thresholds_with_duplicates = [0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6]
+    # Unique: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] = 6 unique + 0.0 = 7 total
+
+    # Should work with CI enabled since unique count <= 10
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        thresholds_with_duplicates,
+        calculate_threshold_ci=True,
+        bootstrap_rounds=100  # Small number for faster test
+    )
+
+    # Should return results for unique thresholds only
+    assert len(result) == 7  # 6 unique + 0.0
+
+    # Now test with duplicates that result in > 10 unique thresholds
+    many_thresholds_with_duplicates = [
+        0.1, 0.1, 0.15, 0.15, 0.2, 0.2, 0.25, 0.25, 0.3, 0.3,
+        0.35, 0.35, 0.4, 0.4, 0.45, 0.45, 0.5, 0.5, 0.55, 0.55, 0.6, 0.6
+    ]
+    # Unique: 11 thresholds + 0.0 = 12 total
+
+    with pytest.raises(ValueError, match=r"Too many thresholds.*CI calculations enabled.*Use force_eval=True"):
+        evaluation(
+            synth_table_with_metadata,
+            "test_model",
+            "test_filter",
+            many_thresholds_with_duplicates,
+            calculate_threshold_ci=True  # Enable CI to trigger the limit
+        )

@@ -2,6 +2,7 @@
 Evaluation module for calculating performance metrics.
 """
 
+import json
 import warnings
 
 import numpy as np
@@ -56,6 +57,8 @@ _ci_utils_available = calculate_bootstrap_ci is not None or anaci is not None
 # Define standard metadata keys (using strings for broader compatibility, bytes are also fine)
 META_KEY_Y_PROBA = "pysalient.io.y_proba_col"
 META_KEY_Y_LABEL = "pysalient.io.y_label_col"
+META_KEY_AGGREGATION_COLS = "pysalient.io.aggregation_cols"
+META_KEY_TIMESERIES_COL = "pysalient.io.timeseries_col"
 
 
 # This is the public API function
@@ -64,11 +67,14 @@ def evaluation(
     modelid: str,
     filter_desc: str,
     thresholds: list[float] | tuple[float, ...] | tuple[float, float, float],
-    timeseries_col: str | None = None,  # Add timeseries column name parameter
-    time_unit: str | None = None,  # Add time unit parameter
+    time_to_event_cols: dict[str, str] | None = None,  # NEW: Clinical event columns for time-to-event metrics
+    aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
+    time_unit: str = "hour",  # NEW: Time unit for calculation and column naming in time-to-event metrics
+    time_to_event_fillna: float | None = None,  # NEW: Fill NaN values in time-to-event metrics
     force_threshold_zero: bool = True,
     decimal_places: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
+    force_eval: bool = False,  # Force evaluation even if more than 10 thresholds
     #################
     # CI Parameters #
     #################
@@ -103,14 +109,6 @@ def evaluation(
     using the method specified by `threshold_ci_method` if `calculate_threshold_ci`
     is True.
 
-    If `timeseries_col` is provided, calculates the "Time to First Alert" metric for each threshold,
-    representing the time from the first record to when the model's predicted probability first
-    exceeds that threshold.
-    The calculation depends on the data type of `timeseries_col`:
-        - Integer or Floating type: Time is taken directly from the column value at the first alert.
-          Requires `time_unit` to be specified (e.g., 'rows', 'hours', 'days').
-        - Temporal type (datetime/timestamp): Time is calculated as the timedelta
-          in seconds between the first record and the first alert. `time_unit` is ignored.
 
     Uses scikit-learn for AUROC/AUPRC/Accuracy/F1-Score and NumPy/internal helpers
     for other calculations. Optionally rounds float metrics.
@@ -118,7 +116,7 @@ def evaluation(
     Args:
         data: Input PyArrow Table, loaded via pysalient.io. Must contain
               columns specified in its schema metadata under keys like
-              META_KEY_Y_PROBA and META_KEY_Y_LABEL, plus `timeseries_col` if provided.
+              META_KEY_Y_PROBA and META_KEY_Y_LABEL.
         modelid: An identifier string for the model being evaluated (user-provided).
         filter_desc: A string describing any filtering applied to the data
                      (e.g., 'all_sites_test', 'cohort_A', user-provided).
@@ -127,23 +125,37 @@ def evaluation(
             - A tuple of three floats (start, stop, step) to generate a range
               (e.g., (0.1, 0.9, 0.05) generates 0.1, 0.15, ..., 0.9).
               Note: np.linspace is now used for range generation.
-        timeseries_col: Optional name of the column containing time information
-                        (integer indices or datetime/timestamp). If None, time to
-                        first alert is not calculated. Defaults to None.
-        time_unit: Unit description (e.g., 'rows', 'minutes') if `timeseries_col`
-                   contains integers or floats. Required if `timeseries_col` is integer or float type.
-                   Ignored if `timeseries_col` is temporal or None. Defaults to None.
+        time_to_event_cols: Optional dictionary mapping metric base names to clinical event column names.
+                           Key: Base name for output metrics (e.g., 'bc' for blood culture metrics).
+                           Value: Column name containing clinical event timestamps.
+                           Generates 3 metrics per key: {aggregation_func}_{time_unit}_from_first_alert_to_{key},
+                           count_first_alerts_before_{key}, count_first_alerts_after_or_at_{key}.
+                           Only calculated if aggregation metadata is present. Defaults to None.
+        aggregation_func: Aggregation function for time-to-event metrics across encounters.
+                         Supported: 'median', 'mean', 'min', 'max', 'std', 'var' (any NumPy function).
+                         Defaults to 'median' for compatibility with reference implementation.
+        time_unit: Time unit for both calculation and column naming in time-to-event metrics.
+                  Supports: 'second(s)', 'minute(s)', 'hour(s)', 'day(s)', 'week(s)' and common abbreviations
+                  (e.g., 's', 'sec', 'min', 'hr', 'h', 'd', 'w').
+                  Time differences are calculated in seconds then converted to this unit.
+                  Defaults to 'hour' (matching current_process.py behavior).
+        time_to_event_fillna: Fill value for NaN time-to-event metrics. If provided, replaces NaN values
+                             in time-to-event hours columns with this value. Use 0.0 for zero imputation.
+                             If None (default), NaN values are preserved. Only affects time-to-event metrics.
         force_threshold_zero: If True (default), forces the 0.0 threshold to always be included
                               in the evaluation thresholds. If False, 0.0 is only included
                               if specified in the `thresholds` input or generated by a range.
         decimal_places: If provided as an integer, rounds the calculated float
                         metrics (AUROC, AUPRC, Prevalence, PPV, Sensitivity, Specificity,
-                        NPV, Accuracy, F1-Score, CIs, time_to_first_alert_value)
+                        NPV, Accuracy, F1-Score, CIs)
                         to the specified number of decimal places. Defaults to None (no rounding).
         verbosity: Controls the verbosity of logging and warnings.
                    - `<= -1`: Show INFO, WARNING, and ERROR level messages.
                    - `== 0`: Show WARNING and ERROR level messages (default).
                    - `>= 1`: Show only ERROR level messages (suppress warnings).
+        force_eval: If True, bypasses the threshold count check and forces evaluation
+                   even if more than 10 thresholds are specified. If False (default),
+                   raises a ValueError if more than 10 thresholds would be evaluated.
         calculate_au_ci: If True, calculate confidence intervals for Area Under Curve
                          metrics (AUROC, AUPRC) using the bootstrap method. Defaults to False.
         calculate_threshold_ci: If True, calculate confidence intervals for threshold-specific
@@ -167,8 +179,7 @@ def evaluation(
     Returns:
         A new PyArrow Table containing the evaluation results, with one row per
         threshold. The metrics reflect performance on the input data.
-        Columns include: 'modelid', 'filter_desc', 'threshold',
-        'time_to_first_alert_value', 'time_to_first_alert_unit', 'AUROC',
+        Base columns include: 'modelid', 'filter_desc', 'threshold', 'AUROC',
         'AUROC_Lower_CI', 'AUROC_Upper_CI', 'AUPRC', 'AUPRC_Lower_CI',
         'AUPRC_Upper_CI', 'Prevalence', 'Sample_Size', 'Label_Count', 'TP', 'TN',
         'FP', 'FN', 'PPV', 'PPV_Lower_CI', 'PPV_Upper_CI', 'Sensitivity',
@@ -176,10 +187,16 @@ def evaluation(
         'Specificity_Lower_CI', 'Specificity_Upper_CI', 'NPV', 'NPV_Lower_CI',
         'NPV_Upper_CI', 'Accuracy', 'Accuracy_Lower_CI', 'Accuracy_Upper_CI',
         'F1_Score', 'F1_Score_Lower_CI', 'F1_Score_Upper_CI'.
+
+        Additional dynamic columns are added for each key in `time_to_event_cols`:
+        '{aggregation_func}_{time_unit}_from_first_alert_to_{key}' (float64),
+        'count_first_alerts_before_{key}' (int64),
+        'count_first_alerts_after_or_at_{key}' (int64).
         Note: 'Sample_Size' reflects the number of rows (events or pre-aggregated groups)
         in the input data, and 'Label_Count' reflects the number of positive labels
         in the input data.
-        Time to first alert columns are null if `timeseries_col` is None or calculation fails.
+        Time-to-event columns are only added if `time_to_event_cols` is provided and
+        aggregation metadata is present.
         AU CI columns contain nulls if `calculate_au_ci` is False.
         Threshold CI columns contain nulls if `calculate_threshold_ci` is False,
         if the method is unsupported for a specific metric (e.g., F1 with analytical methods),
@@ -187,12 +204,11 @@ def evaluation(
 
     Raises:
         ValueError: If required metadata keys are missing, column names from
-                    metadata or `timeseries_col` don't exist in the table, thresholds are invalid,
+                    metadata don't exist in the table, thresholds are invalid,
                     threshold specification format is incorrect, data types
-                    are unsuitable, `time_unit` is missing when required, or CI parameters are invalid.
+                    are unsuitable, or CI parameters are invalid.
         TypeError: If input data is not a PyArrow Table or columns have wrong types,
-                   or if aggregation results in non-numeric types where numeric are expected,
-                   or if `timeseries_col` has an unsupported data type.
+                   or if aggregation results in non-numeric types where numeric are expected.
         ImportError: If scikit-learn is required but not installed, or if required
                      CI utility modules (_bootstrap_utils or _analytical_ci_utils)
                      cannot be imported when the corresponding `threshold_ci_method` is requested.
@@ -216,6 +232,52 @@ def evaluation(
     # Add type check for calculate_threshold_ci
     if not isinstance(calculate_threshold_ci, bool):
         raise TypeError("Input 'calculate_threshold_ci' must be a boolean.")
+
+    # Validate new time-to-event parameters
+    if time_to_event_cols is not None:
+        if not isinstance(time_to_event_cols, dict):
+            raise TypeError("Input 'time_to_event_cols' must be a dictionary or None.")
+        if not time_to_event_cols:  # Check for empty dict
+            raise ValueError("Input 'time_to_event_cols' cannot be an empty dictionary.")
+        for key, value in time_to_event_cols.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                raise TypeError("All keys and values in 'time_to_event_cols' must be strings.")
+            if not key or not value:  # Check for empty strings
+                raise ValueError("All keys and values in 'time_to_event_cols' must be non-empty strings.")
+
+    if not isinstance(aggregation_func, str):
+        raise TypeError("Input 'aggregation_func' must be a string.")
+    if not aggregation_func:
+        raise ValueError("Input 'aggregation_func' cannot be an empty string.")
+
+    # Validate time_to_event_fillna parameter
+    if time_to_event_fillna is not None:
+        if not isinstance(time_to_event_fillna, int | float):
+            raise TypeError("Input 'time_to_event_fillna' must be a number or None.")
+
+    # Validate that aggregation_func is a valid NumPy function
+    if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
+        raise ValueError(f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function.")
+
+    # Validate time_unit if provided
+    if not isinstance(time_unit, str) or not time_unit:
+        raise TypeError("Input 'time_unit' must be a non-empty string.")
+
+    # Define supported time units for validation
+    supported_time_units = {
+        'second', 'seconds', 'sec', 'secs', 's',
+        'minute', 'minutes', 'min', 'mins', 'm',
+        'hour', 'hours', 'hr', 'hrs', 'h',
+        'day', 'days', 'd',
+        'week', 'weeks', 'w',
+    }
+
+    if time_unit.lower() not in supported_time_units:
+        raise ValueError(
+            f"Unsupported time_unit '{time_unit}'. "
+            f"Supported units: {sorted(supported_time_units)}"
+        )
+
     ###########################################
     # Validate CI Parameters and Dependencies #
     ###########################################
@@ -329,6 +391,7 @@ def evaluation(
         # Use .get() with a default of None, then check
         y_proba_col_bytes = metadata.get(META_KEY_Y_PROBA.encode("utf-8"))
         y_label_col_bytes = metadata.get(META_KEY_Y_LABEL.encode("utf-8"))
+        aggregation_cols_bytes = metadata.get(META_KEY_AGGREGATION_COLS.encode("utf-8"))
 
         if y_proba_col_bytes is None:
             raise KeyError(f"Metadata key '{META_KEY_Y_PROBA}' not found.")
@@ -337,6 +400,23 @@ def evaluation(
 
         y_proba_col = y_proba_col_bytes.decode("utf-8")
         y_label_col = y_label_col_bytes.decode("utf-8")
+
+        # aggregation_cols is optional - only needed for time-to-event calculations
+        aggregation_cols = None
+        if aggregation_cols_bytes is not None:
+            # Parse JSON-stored aggregation_cols - it might be a list or single string
+            aggregation_cols_json = aggregation_cols_bytes.decode("utf-8")
+            aggregation_cols_list = json.loads(aggregation_cols_json)
+
+            # Handle case where it's an empty list (when perform_aggregation=False)
+            if aggregation_cols_list:
+                # For time-to-event calculations, we need the first aggregation column
+                # (assuming single column for encounter grouping)
+                aggregation_cols = aggregation_cols_list[0] if isinstance(aggregation_cols_list, list) else aggregation_cols_list
+            else:
+                # Empty list means no aggregation column available
+                aggregation_cols = None
+
 
     except KeyError as e:
         raise KeyError(f"Required metadata key missing: {e}") from e
@@ -347,9 +427,69 @@ def evaluation(
         raise ValueError(f"Column '{y_proba_col}' (from metadata) not found in table.")
     if y_label_col not in data.column_names:
         raise ValueError(f"Column '{y_label_col}' (from metadata) not found in table.")
+
+    # Validate time-to-event columns if provided
+    time_to_event_enabled = False
+    if time_to_event_cols is not None:
+        if aggregation_cols is None:
+            if verbosity <= 0:
+                warnings.warn(
+                    "time_to_event_cols provided but aggregation metadata not found. "
+                    "Time-to-event calculations will be skipped.",
+                    UserWarning
+                )
+        else:
+            # Check that all specified clinical event columns exist
+            for event_key, event_col in time_to_event_cols.items():
+                if event_col not in data.column_names:
+                    raise ValueError(f"Time-to-event column '{event_col}' (for key '{event_key}') not found in table.")
+
+            # Validate that time_to_event_cols contain timestamp columns
+            for event_key, event_col in time_to_event_cols.items():
+                col_type = data[event_col].type
+                if not pa.types.is_temporal(col_type):
+                    warnings.warn(
+                        f"time_to_event_cols['{event_key}'] = '{event_col}' is not a timestamp column "
+                        f"(found {col_type}). Expected timestamp column for time calculations. "
+                        f"This may cause calculation failures.",
+                        UserWarning
+                    )
+
+            # Check that aggregation column exists
+            if aggregation_cols not in data.column_names:
+                raise ValueError(f"Aggregation column '{aggregation_cols}' (from metadata) not found in table.")
+
+            time_to_event_enabled = True
     ################################
     # 2. Parse/Generate Thresholds #
     ################################
+    try:
+        # First generate thresholds without forcing 0 to count user-specified thresholds only
+        user_threshold_list = _generate_thresholds(
+            thresholds, include_zero=False
+        )
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Invalid threshold specification: {e}") from e
+
+    # Check threshold count and enforce limit if force_eval is False
+    # Only count user-specified thresholds, not the forced 0 threshold
+    # Only enforce limit when CI calculations are enabled (which makes evaluation computationally expensive)
+    ci_calculations_enabled = calculate_au_ci or calculate_threshold_ci
+    if len(user_threshold_list) > 10 and not force_eval and ci_calculations_enabled:
+        ci_types = []
+        if calculate_au_ci:
+            ci_types.append("AU CI")
+        if calculate_threshold_ci:
+            ci_types.append(f"threshold CI ({threshold_ci_method})")
+        ci_desc = " and ".join(ci_types)
+
+        raise ValueError(
+            f"Too many thresholds ({len(user_threshold_list)}) specified with CI calculations enabled ({ci_desc}). "
+            f"Maximum allowed is 10 thresholds when CI calculations are enabled to prevent excessive computation. "
+            f"Use force_eval=True to bypass this check, or disable CI calculations for faster evaluation with many thresholds."
+        )
+
+    # Now generate the final threshold list including forced 0 if needed
     try:
         threshold_list = _generate_thresholds(
             thresholds, include_zero=force_threshold_zero
@@ -401,48 +541,6 @@ def evaluation(
         # Ensure integer type even if already binary
         labels_to_eval = labels_to_eval.astype(np.int8)
 
-    # --- Handle Timeseries Column ---
-    timeseries_array: np.ndarray | None = None
-    timeseries_pa_type: pa.DataType | None = None
-    if timeseries_col is not None:
-        if not isinstance(timeseries_col, str):
-            raise TypeError("timeseries_col must be a string (column name) or None.")
-        if timeseries_col not in data.column_names:
-            raise ValueError(
-                f"Timeseries column '{timeseries_col}' not found in table."
-            )
-
-        timeseries_pa_column = data[timeseries_col]
-        timeseries_pa_type = timeseries_pa_column.type
-        timeseries_array = timeseries_pa_column.to_numpy()
-
-        # Validate type and time_unit requirement
-        if pa.types.is_integer(timeseries_pa_type) or pa.types.is_floating(
-            timeseries_pa_type
-        ):
-            if time_unit is None:
-                raise ValueError(
-                    "time_unit parameter is required when timeseries_col is of integer or float type."
-                )
-            if not isinstance(time_unit, str):
-                raise TypeError("time_unit must be a string.")
-        elif pa.types.is_temporal(timeseries_pa_type):
-            # time_unit is ignored for temporal types, but check if provided unnecessarily
-            if time_unit is not None:
-                # Wrap warning in verbosity check
-                if verbosity <= 0:
-                    # Consider using logging.info here if a logger is configured
-                    pass  # For now, no INFO equivalent for this warning
-                    warnings.warn(
-                        f"time_unit ('{time_unit}') provided but timeseries_col ('{timeseries_col}') is temporal. time_unit will be ignored.",
-                        UserWarning,
-                    )
-            time_unit = None  # Ensure it's None internally for temporal
-        else:
-            raise TypeError(
-                f"Unsupported data type for timeseries column '{timeseries_col}': {timeseries_pa_type}. "
-                "Expected integer, float, or temporal (date/time/timestamp)."
-            )
 
     #############################################################
     # 4. Perform Evaluation using processed probas and labels   #
@@ -477,11 +575,16 @@ def evaluation(
             modelid=modelid,
             filter_desc=filter_desc,
             threshold_list=threshold_list,
-            timeseries_array=timeseries_array,  # Pass timeseries data
-            timeseries_pa_type=timeseries_pa_type,  # Pass original type
-            time_unit=time_unit,  # Pass time unit
+            timeseries_array=None,  # No timeseries data
+            timeseries_pa_type=None,  # No timeseries type
+            time_unit=time_unit,  # Pass time unit for column naming
             aggregation_keys=None,
-            aggregation_cols=None,
+            aggregation_cols=aggregation_cols,  # Pass aggregation column name
+            time_to_event_cols=time_to_event_cols,  # Pass time-to-event columns
+            time_to_event_enabled=time_to_event_enabled,  # Pass whether enabled
+            aggregation_func=aggregation_func,  # Pass aggregation function
+            time_to_event_fillna=time_to_event_fillna,  # Pass fillna value
+            data=data,  # Pass full data table for time-to-event calculations
             decimal_places=decimal_places,
             calculate_au_ci=calculate_au_ci,
             calculate_threshold_ci=calculate_threshold_ci,
@@ -500,15 +603,16 @@ def evaluation(
     ####################################
     # 5. Convert List to PyArrow Table #
     ####################################
-    # Define schema for type safety and consistency
-    # Schema no longer needs aggregation columns
+    # Define base schema for type safety and consistency
     schema_fields = [
         pa.field("modelid", pa.string()),
         pa.field("filter_desc", pa.string()),
         pa.field("threshold", pa.float64()),
-        # Time to First Alert
-        pa.field("time_to_first_alert_value", pa.float64()),  # Nullable float
-        pa.field("time_to_first_alert_unit", pa.string()),  # Nullable string
+    ]
+
+
+    # Add overall metrics
+    schema_fields.extend([
         # Overall Metrics
         pa.field("AUROC", pa.float64()),
         pa.field("AUROC_Lower_CI", pa.float64()),
@@ -543,7 +647,17 @@ def evaluation(
         pa.field("F1_Score", pa.float64()),
         pa.field("F1_Score_Lower_CI", pa.float64()),
         pa.field("F1_Score_Upper_CI", pa.float64()),
-    ]
+    ])
+
+    # Add dynamic time-to-event columns if enabled
+    if time_to_event_enabled and time_to_event_cols is not None:
+        for event_key in time_to_event_cols.keys():
+            # Add 3 columns per event key
+            schema_fields.extend([
+                pa.field(f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}", pa.float64()),
+                pa.field(f"count_first_alerts_before_{event_key}", pa.int64()),
+                pa.field(f"count_first_alerts_after_or_at_{event_key}", pa.int64()),
+            ])
 
     result_schema = pa.schema(schema_fields)
 
