@@ -7,7 +7,7 @@ name = "pysalient"
 version = "0.0.1"
 description = "pySALIENT: Python implementation of the SALIENT framework to assist with clinical AI research and implementation"
 readme = "README.md"
-requires-python = ">=3.11" # Adjust if you need a different minimum version
+requires-python = ">=3.11" 
 license = { file = "LICENSE" }
 authors = [
     { name = "pySALIENT Contributors" }
@@ -27,7 +27,7 @@ dependencies = [
     "pyarrow",
     "numpy",
     "pandas",
-    "scikit-learn" 
+    "scikit-learn"
 ]
 
 [project.optional-dependencies]
@@ -51,14 +51,16 @@ examples = [
 ]
 
   plot = [
-      "matplotlib",
+      "matplotlib", 
   ]
 
 [project.urls]
 Homepage = "https://github.com/esalient/pysalient"
 Repository = "https://github.com/esalient/pysalient"
 
-# --- Tool Configurations ---
+########################
+## TOOL CONFIGURATION ##
+########################
 
 [tool.ruff]
 exclude = [
@@ -89,6 +91,7 @@ line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
+# See https://docs.astral.sh/ruff/rules/ for all rules
 select = ["E", "F", "W", "I", "N", "UP"]
 ignore = ["E501"] # Ignore line too long errors
 
