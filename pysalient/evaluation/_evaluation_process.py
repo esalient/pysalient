@@ -8,11 +8,11 @@ import pyarrow as pa
 try:
     from sklearn.metrics import (
         accuracy_score,
+        auc,
         average_precision_score,
         f1_score,
-        roc_auc_score,
         precision_recall_curve,
-        auc,
+        roc_auc_score,
     )
 except ImportError:
     # Allow the module to be imported, but the function will fail if sklearn is needed.
@@ -142,17 +142,17 @@ def _process_single_evaluation(
         return results
 
     unique_labels = np.unique(labels)
-    
+
     # Extract data arrays for time-to-event calculations if enabled
     encounter_ids_array = None
     alert_timestamps_array = None
     clinical_event_arrays = {}
-    
+
     if time_to_event_enabled and data is not None and time_to_event_cols is not None:
         try:
             # Extract encounter IDs
             encounter_ids_array = data[aggregation_cols].to_numpy()
-            
+
             # Extract alert timestamps (timeseries column)
             if timeseries_array is not None:
                 alert_timestamps_array = timeseries_array
@@ -173,11 +173,11 @@ def _process_single_evaluation(
                         raise ValueError("timeseries_array is None and no timeseries column found in metadata")
                 else:
                     raise ValueError("timeseries_array is None and no metadata available")
-            
+
             # Extract clinical event timestamp arrays
             for event_key, event_col in time_to_event_cols.items():
                 clinical_event_arrays[event_key] = data[event_col].to_numpy()
-                
+
         except Exception as e:
             warnings.warn(
                 f"Failed to extract arrays for time-to-event calculations: {e}. "
@@ -243,7 +243,7 @@ def _process_single_evaluation(
                 def _auprc_for_bootstrap(y_true_boot, y_pred_boot):
                     precision_boot, recall_boot, _ = precision_recall_curve(y_true_boot, y_pred_boot)
                     return auc(recall_boot, precision_boot)
-                
+
                 auprc_lower_ci, auprc_upper_ci = calculate_bootstrap_ci(
                     y_true=labels,
                     y_pred=probas,
@@ -592,7 +592,7 @@ def _process_single_evaluation(
             # Filter to true positives at this threshold (ARCHITECTURE.md line 226)
             tp_mask = (probas >= threshold) & (labels == 1)
             tp_count = np.sum(tp_mask)
-            
+
             if tp_count > 0:  # Only proceed if there are true positives
                 for event_key, event_col in time_to_event_cols.items():
                     try:
@@ -600,7 +600,7 @@ def _process_single_evaluation(
                         tp_encounter_ids = encounter_ids_array[tp_mask]
                         tp_alert_timestamps = alert_timestamps_array[tp_mask]
                         tp_event_timestamps = clinical_event_arrays[event_key][tp_mask]
-                        
+
                         # Calculate time differences - always in seconds first for precision
                         # Then convert to requested time_unit
                         if pa.types.is_temporal(timeseries_pa_type):
@@ -609,7 +609,7 @@ def _process_single_evaluation(
                         else:
                             # For numeric timestamps, assume they are already in the correct unit
                             time_diffs_seconds = (tp_event_timestamps - tp_alert_timestamps).astype(float)
-                        
+
                         # Convert from seconds to requested time unit using a conversion factor
                         # This avoids multiple if/else statements and maintains precision
                         time_unit_conversions = {
@@ -619,27 +619,27 @@ def _process_single_evaluation(
                             'day': 86400.0, 'days': 86400.0, 'd': 86400.0,
                             'week': 604800.0, 'weeks': 604800.0, 'w': 604800.0,
                         }
-                        
+
                         # Get conversion factor (default to hours for backward compatibility)
                         time_unit_key = time_unit.lower() if time_unit else 'hour'
                         conversion_factor = time_unit_conversions.get(time_unit_key, 3600.0)  # Default to hours
-                        
+
                         # Convert to requested unit
                         time_diffs = time_diffs_seconds / conversion_factor
-                        
+
                         # Group by encounter and take max time per encounter (following notebook logic)
                         unique_encounters = np.unique(tp_encounter_ids)
                         encounter_max_times = []
-                        
+
                         for enc_id in unique_encounters:
                             enc_mask = tp_encounter_ids == enc_id
                             enc_time_diffs = time_diffs[enc_mask]
                             # Use nanmax to handle NaN values like Pandas .max() does
                             max_time = np.nanmax(enc_time_diffs)
                             encounter_max_times.append(max_time)
-                        
+
                         encounter_max_times = np.array(encounter_max_times)
-                        
+
                         # Apply NaN-aware aggregation function across encounters to match Pandas behavior
                         if len(encounter_max_times) > 0:
                             # Use NaN-aware version of aggregation function to match Pandas behavior
@@ -669,54 +669,53 @@ def _process_single_evaluation(
                                         agg_time = agg_func(valid_times)
                                     else:
                                         agg_time = np.nan
-                            # Count encounters properly, excluding NaN values 
+                            # Count encounters properly, excluding NaN values
                             valid_times = encounter_max_times[~np.isnan(encounter_max_times)]
                             count_before = np.sum(valid_times > 0)
                             count_after_or_at = np.sum(valid_times <= 0)
-                            
+
                             # Calculate aggregation for only alerts after or at event time
                             after_or_at_times = encounter_max_times[encounter_max_times <= 0]
                             if len(after_or_at_times) > 0:
                                 # Apply same NaN-aware logic for after/at times
                                 if aggregation_func == 'median':
-                                    agg_time_after_or_at = np.nanmedian(after_or_at_times)
+                                    np.nanmedian(after_or_at_times)
                                 elif aggregation_func == 'mean':
-                                    agg_time_after_or_at = np.nanmean(after_or_at_times)
+                                    np.nanmean(after_or_at_times)
                                 elif aggregation_func == 'min':
-                                    agg_time_after_or_at = np.nanmin(after_or_at_times)
+                                    np.nanmin(after_or_at_times)
                                 elif aggregation_func == 'max':
-                                    agg_time_after_or_at = np.nanmax(after_or_at_times)
+                                    np.nanmax(after_or_at_times)
                                 elif aggregation_func == 'std':
-                                    agg_time_after_or_at = np.nanstd(after_or_at_times)
+                                    np.nanstd(after_or_at_times)
                                 elif aggregation_func == 'var':
-                                    agg_time_after_or_at = np.nanvar(after_or_at_times)
+                                    np.nanvar(after_or_at_times)
                                 else:
                                     # For other functions, try nan version first, fallback to regular
                                     nan_func_name = f'nan{aggregation_func}'
                                     if hasattr(np, nan_func_name):
                                         nan_agg_func = getattr(np, nan_func_name)
-                                        agg_time_after_or_at = nan_agg_func(after_or_at_times)
+                                        nan_agg_func(after_or_at_times)
                                     else:
                                         # Fallback: filter out NaN values manually then use regular function
                                         valid_times = after_or_at_times[~np.isnan(after_or_at_times)]
                                         if len(valid_times) > 0:
                                             agg_func = getattr(np, aggregation_func)
-                                            agg_time_after_or_at = agg_func(valid_times)
+                                            agg_func(valid_times)
                                         else:
-                                            agg_time_after_or_at = np.nan
+                                            pass
                             else:
-                                agg_time_after_or_at = np.nan
+                                pass
                         else:
                             agg_time = np.nan
                             count_before = 0
                             count_after_or_at = 0
-                            agg_time_after_or_at = np.nan
-                        
+
                         # Store results
                         time_to_event_metrics[f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}"] = agg_time
                         time_to_event_metrics[f"count_first_alerts_before_{event_key}"] = count_before
                         time_to_event_metrics[f"count_first_alerts_after_or_at_{event_key}"] = count_after_or_at
-                        
+
                     except Exception as e:
                         # Log warning and set NaN/0 values for this event
                         warnings.warn(
@@ -831,20 +830,20 @@ def _process_single_evaluation(
             "F1_Score_Lower_CI": f1_lower_ci,
             "F1_Score_Upper_CI": f1_upper_ci,
         }
-        
+
         # Add time-to-first-alert fields only if timeseries data was provided
         if timeseries_array is not None:
             row_data.update({
                 "time_to_first_alert_value": time_to_first_alert_value,
                 "time_to_first_alert_unit": time_to_first_alert_unit,
             })
-        
+
         # Add time-to-event metrics if they were calculated
         if time_to_event_metrics:
             # DO NOT round time-to-event metrics here - preserve full precision for visualization
             # The visualization layer will handle formatting according to decimal_places
             final_time_to_event_metrics = time_to_event_metrics
-            
+
             # Apply fillna to time-to-event metrics if requested
             if time_to_event_fillna is not None:
                 fillna_time_to_event_metrics = {}
@@ -856,7 +855,7 @@ def _process_single_evaluation(
                         # Keep original value
                         fillna_time_to_event_metrics[key] = value
                 final_time_to_event_metrics = fillna_time_to_event_metrics
-            
+
             row_data.update(final_time_to_event_metrics)
 
         # Append row data

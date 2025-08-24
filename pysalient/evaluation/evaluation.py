@@ -136,7 +136,7 @@ def evaluation(
                          Defaults to 'median' for compatibility with reference implementation.
         time_unit: Time unit for both calculation and column naming in time-to-event metrics.
                   Supports: 'second(s)', 'minute(s)', 'hour(s)', 'day(s)', 'week(s)' and common abbreviations
-                  (e.g., 's', 'sec', 'min', 'hr', 'h', 'd', 'w'). 
+                  (e.g., 's', 'sec', 'min', 'hr', 'h', 'd', 'w').
                   Time differences are calculated in seconds then converted to this unit.
                   Defaults to 'hour' (matching current_process.py behavior).
         time_to_event_fillna: Fill value for NaN time-to-event metrics. If provided, replaces NaN values
@@ -252,17 +252,17 @@ def evaluation(
 
     # Validate time_to_event_fillna parameter
     if time_to_event_fillna is not None:
-        if not isinstance(time_to_event_fillna, (int, float)):
+        if not isinstance(time_to_event_fillna, int | float):
             raise TypeError("Input 'time_to_event_fillna' must be a number or None.")
 
     # Validate that aggregation_func is a valid NumPy function
     if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
         raise ValueError(f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function.")
-    
+
     # Validate time_unit if provided
     if not isinstance(time_unit, str) or not time_unit:
         raise TypeError("Input 'time_unit' must be a non-empty string.")
-    
+
     # Define supported time units for validation
     supported_time_units = {
         'second', 'seconds', 'sec', 'secs', 's',
@@ -271,7 +271,7 @@ def evaluation(
         'day', 'days', 'd',
         'week', 'weeks', 'w',
     }
-    
+
     if time_unit.lower() not in supported_time_units:
         raise ValueError(
             f"Unsupported time_unit '{time_unit}'. "
@@ -443,7 +443,7 @@ def evaluation(
             for event_key, event_col in time_to_event_cols.items():
                 if event_col not in data.column_names:
                     raise ValueError(f"Time-to-event column '{event_col}' (for key '{event_key}') not found in table.")
-            
+
             # Validate that time_to_event_cols contain timestamp columns
             for event_key, event_col in time_to_event_cols.items():
                 col_type = data[event_col].type
@@ -482,7 +482,7 @@ def evaluation(
         if calculate_threshold_ci:
             ci_types.append(f"threshold CI ({threshold_ci_method})")
         ci_desc = " and ".join(ci_types)
-        
+
         raise ValueError(
             f"Too many thresholds ({len(user_threshold_list)}) specified with CI calculations enabled ({ci_desc}). "
             f"Maximum allowed is 10 thresholds when CI calculations are enabled to prevent excessive computation. "

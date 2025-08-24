@@ -116,13 +116,13 @@ The primary function currently is `format_evaluation_table`, which helps display
            'antibiotics': 'antibiotic_timestamp'
        }, # Optional: clinical event columns for time-to-event metrics
        aggregation_func="median", # Aggregation function for time-to-event (default: median)
-       time_unit="hours", # Unit label for time-to-event column names (default: hours)
+       time_unit="hour", # Unit label for time-to-event column names (default: hour)
        decimal_places=3, # Evaluation rounding (optional)
        # force_eval=True  # Uncomment if using >10 thresholds
    )
 
    # The 'results_table' will now contain dynamic columns for time-to-event metrics:
-   # - 'median_hours_from_first_alert_to_culture' (or other aggregation function and time unit)
+   # - 'median_hour_from_first_alert_to_culture' (or other aggregation function and time unit)
    # - 'count_first_alerts_before_culture' 
    # - 'count_first_alerts_after_or_at_culture'
    # - Similar columns for 'antibiotics'

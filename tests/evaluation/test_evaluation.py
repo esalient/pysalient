@@ -353,7 +353,7 @@ def test_evaluation_basic(synth_table_with_metadata):
 
     # Manually calculate expected values for synth_data_basic
     expected_auroc = 0.9375
-    expected_auprc = 0.95
+    expected_auprc = 0.94375  # Updated to use precision_recall_curve + auc method (corrected calculation)
     expected_prevalence = 4 / 8
     expected_sample_size = 8
     expected_label_count = 4
@@ -446,7 +446,7 @@ def test_evaluation_rounding(synth_table_with_metadata):
     decimal_places_to_test = 2
 
     expected_auroc = round(0.9375, decimal_places_to_test)  # 0.94
-    expected_auprc = round(0.95, decimal_places_to_test)  # 0.95
+    expected_auprc = round(0.94375, decimal_places_to_test)  # 0.94 (updated to corrected calculation)
     expected_prevalence = round(4 / 8, decimal_places_to_test)  # 0.50
 
     expected_rows = [
@@ -1515,62 +1515,61 @@ def test_evaluation_force_eval_with_many_thresholds(synth_table_with_metadata):
     """Test that force_eval=True allows evaluation with more than 10 thresholds."""
     # Create a threshold list with more than 10 values
     many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
-    
+
     # Should work with force_eval=True
     result = evaluation(
         synth_table_with_metadata,
-        "test_model", 
+        "test_model",
         "test_filter",
         many_thresholds,
         force_eval=True
     )
-    
+
     # Should return results for all thresholds (plus 0.0 which is added by default)
     expected_threshold_count = len(set([0.0] + many_thresholds))  # Remove duplicates and add 0.0
     assert len(result) == expected_threshold_count
-    
+
     # Verify all thresholds are present in results
     result_thresholds = set(result['threshold'].to_pylist())
     expected_thresholds = set([0.0] + many_thresholds)
     assert result_thresholds == expected_thresholds
 
 
-def test_evaluation_force_eval_false_blocks_many_thresholds(synth_table_with_metadata):
-    """Test that force_eval=False (default) blocks evaluation with more than 10 thresholds."""
+def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(synth_table_with_metadata):
+    """Test that force_eval=False blocks evaluation with >10 thresholds when CI calculations are enabled."""
     # Create a threshold list with more than 10 values
     many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
-    
-    # Should raise ValueError with force_eval=False (default)
+
+    # Should raise ValueError with CI enabled and force_eval=False (default)
     with pytest.raises(
         ValueError,
-        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
-    ):
-        evaluation(
-            synth_table_with_metadata,
-            "test_model",
-            "test_filter", 
-            many_thresholds,
-            force_eval=False
-        )
-    
-    # Should also raise with default parameter (force_eval defaults to False)
-    with pytest.raises(
-        ValueError,
-        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
     ):
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
-            many_thresholds
+            many_thresholds,
+            calculate_threshold_ci=True,  # CI enabled - should trigger limit
+            force_eval=False
         )
+
+    # Should work fine without CI enabled (new behavior)
+    result = evaluation(
+        synth_table_with_metadata,
+        "test_model",
+        "test_filter",
+        many_thresholds,
+        calculate_threshold_ci=False  # No CI - should allow many thresholds
+    )
+    assert result.num_rows == len(many_thresholds) + 1  # +1 for automatic 0.0
 
 
 def test_evaluation_force_eval_allows_exactly_10_thresholds(synth_table_with_metadata):
     """Test that exactly 10 thresholds work without force_eval=True."""
     # Create exactly 10 thresholds (plus 0.0 will be added, making 11 total, but we check before adding 0.0)
     exactly_10_thresholds = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    
+
     # Should work without force_eval=True
     result = evaluation(
         synth_table_with_metadata,
@@ -1578,90 +1577,98 @@ def test_evaluation_force_eval_allows_exactly_10_thresholds(synth_table_with_met
         "test_filter",
         exactly_10_thresholds
     )
-    
+
     # Should return results (0.0 added by default makes 11 total)
     assert len(result) == 11  # 10 + 0.0
 
 
-def test_evaluation_force_eval_with_range_specification(synth_table_with_metadata):
-    """Test force_eval with range specification that generates many thresholds."""
+def test_evaluation_force_eval_with_range_specification_and_ci(synth_table_with_metadata):
+    """Test force_eval with range specification that generates many thresholds when CI is enabled."""
     # Create a range that generates more than 10 thresholds
     # (0.0, 1.0, 0.05) should generate 21 thresholds: 0.0, 0.05, 0.10, ..., 1.0
     many_threshold_range = (0.0, 1.0, 0.05)
-    
-    # Should raise without force_eval
+
+    # Should raise without force_eval when CI is enabled
     with pytest.raises(
         ValueError,
-        match=r"Too many thresholds \(\d+\) specified\. Maximum allowed is 10 thresholds.*Use force_eval=True"
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
     ):
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
-            many_threshold_range
+            many_threshold_range,
+            calculate_au_ci=True  # CI enabled - should trigger limit
         )
-    
-    # Should work with force_eval=True
+
+    # Should work with force_eval=True even with CI
     result = evaluation(
         synth_table_with_metadata,
         "test_model",
-        "test_filter", 
+        "test_filter",
         many_threshold_range,
-        force_eval=True
+        calculate_au_ci=True,
+        force_eval=True,
+        bootstrap_rounds=100  # Reduce for faster test
     )
-    
+
     # Should return results for all generated thresholds
     assert len(result) == 21  # 0.0, 0.05, 0.10, ..., 1.0
 
 
-def test_evaluation_force_eval_error_message_accuracy(synth_table_with_metadata):
-    """Test that the error message shows the correct threshold count."""
+def test_evaluation_force_eval_error_message_accuracy_with_ci(synth_table_with_metadata):
+    """Test that the error message shows the correct threshold count when CI is enabled."""
     # Create 15 thresholds
     threshold_list = [i * 0.05 for i in range(1, 16)]  # [0.05, 0.10, ..., 0.75]
-    
+
     with pytest.raises(ValueError) as exc_info:
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
-            threshold_list
+            threshold_list,
+            calculate_au_ci=True  # Enable CI to trigger the limit
         )
-    
+
     error_msg = str(exc_info.value)
     # Should mention the correct count (15 user-specified thresholds, forced 0 doesn't count)
     assert "15" in error_msg  # 15 specified thresholds only
     assert "force_eval=True" in error_msg
     assert "Maximum allowed is 10" in error_msg
+    assert "CI calculations enabled" in error_msg
 
 
-def test_evaluation_force_eval_with_duplicates_counts_unique(synth_table_with_metadata):
-    """Test that threshold counting considers unique thresholds only."""
+def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(synth_table_with_metadata):
+    """Test that threshold counting considers unique thresholds only when CI is enabled."""
     # Create list with duplicates that results in <= 10 unique thresholds
     thresholds_with_duplicates = [0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6]
     # Unique: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] = 6 unique + 0.0 = 7 total
-    
-    # Should work without force_eval since unique count <= 10
+
+    # Should work with CI enabled since unique count <= 10
     result = evaluation(
         synth_table_with_metadata,
         "test_model",
         "test_filter",
-        thresholds_with_duplicates
+        thresholds_with_duplicates,
+        calculate_threshold_ci=True,
+        bootstrap_rounds=100  # Small number for faster test
     )
-    
+
     # Should return results for unique thresholds only
     assert len(result) == 7  # 6 unique + 0.0
-    
+
     # Now test with duplicates that result in > 10 unique thresholds
     many_thresholds_with_duplicates = [
         0.1, 0.1, 0.15, 0.15, 0.2, 0.2, 0.25, 0.25, 0.3, 0.3,
         0.35, 0.35, 0.4, 0.4, 0.45, 0.45, 0.5, 0.5, 0.55, 0.55, 0.6, 0.6
     ]
     # Unique: 11 thresholds + 0.0 = 12 total
-    
-    with pytest.raises(ValueError, match=r"Too many thresholds.*Use force_eval=True"):
+
+    with pytest.raises(ValueError, match=r"Too many thresholds.*CI calculations enabled.*Use force_eval=True"):
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
-            many_thresholds_with_duplicates
+            many_thresholds_with_duplicates,
+            calculate_threshold_ci=True  # Enable CI to trigger the limit
         )

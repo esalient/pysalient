@@ -75,7 +75,7 @@ def format_evaluation_table(
         ci_column: If True (default), display confidence intervals in a separate
                    '{Metric} CI' column. If False, integrate the CI into the
                    main metric column as a string like 'value [lower - upper]'.
-        order_by: Column name(s) to sort the DataFrame by before styling. 
+        order_by: Column name(s) to sort the DataFrame by before styling.
                   Can be a single column name (str) or list of column names (list[str]).
                   If None, no sorting is applied. Defaults to "threshold" to sort by threshold values.
 
@@ -226,13 +226,13 @@ def format_evaluation_table(
         potential_cols = [col for col in DEFAULT_FLOAT_COLS if col in df.columns]
         # Start with potential default float columns
         cols_to_format_set = set(potential_cols)
-        
+
         # Dynamically add time-to-event columns (they have specific naming pattern)
         for col in df.columns:
-            if ("_from_first_alert_to_" in col and 
+            if ("_from_first_alert_to_" in col and
                 not col.startswith("count_")):  # Exclude count columns (integers)
                 cols_to_format_set.add(col)
-        
+
         # Add original metrics found, ONLY if ci_column is True (otherwise they are strings)
         if ci_column:
             cols_to_format_set.update(original_metric_cols_found)
