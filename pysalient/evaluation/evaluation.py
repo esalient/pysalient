@@ -69,7 +69,7 @@ def evaluation(
     thresholds: list[float] | tuple[float, ...] | tuple[float, float, float],
     time_to_event_cols: dict[str, str] | None = None,  # NEW: Clinical event columns for time-to-event metrics
     aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
-    time_unit: str = "hours",  # NEW: Time unit for column naming in time-to-event metrics
+    time_unit: str = "hour",  # NEW: Time unit for calculation and column naming in time-to-event metrics
     time_to_event_fillna: float | None = None,  # NEW: Fill NaN values in time-to-event metrics
     force_threshold_zero: bool = True,
     decimal_places: int | None = None,
@@ -134,10 +134,11 @@ def evaluation(
         aggregation_func: Aggregation function for time-to-event metrics across encounters.
                          Supported: 'median', 'mean', 'min', 'max', 'std', 'var' (any NumPy function).
                          Defaults to 'median' for compatibility with reference implementation.
-        time_unit: Unit label for time-to-event column names. This is purely for column naming/metadata
-                  and does not affect the actual calculations. Use a descriptive name that matches
-                  what your timestamp differences represent (e.g., 'hours', 'minutes', 'days').
-                  Defaults to 'hours'.
+        time_unit: Time unit for both calculation and column naming in time-to-event metrics.
+                  Supports: 'second(s)', 'minute(s)', 'hour(s)', 'day(s)', 'week(s)' and common abbreviations
+                  (e.g., 's', 'sec', 'min', 'hr', 'h', 'd', 'w'). 
+                  Time differences are calculated in seconds then converted to this unit.
+                  Defaults to 'hour' (matching current_process.py behavior).
         time_to_event_fillna: Fill value for NaN time-to-event metrics. If provided, replaces NaN values
                              in time-to-event hours columns with this value. Use 0.0 for zero imputation.
                              If None (default), NaN values are preserved. Only affects time-to-event metrics.
@@ -257,6 +258,25 @@ def evaluation(
     # Validate that aggregation_func is a valid NumPy function
     if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
         raise ValueError(f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function.")
+    
+    # Validate time_unit if provided
+    if not isinstance(time_unit, str) or not time_unit:
+        raise TypeError("Input 'time_unit' must be a non-empty string.")
+    
+    # Define supported time units for validation
+    supported_time_units = {
+        'second', 'seconds', 'sec', 'secs', 's',
+        'minute', 'minutes', 'min', 'mins', 'm',
+        'hour', 'hours', 'hr', 'hrs', 'h',
+        'day', 'days', 'd',
+        'week', 'weeks', 'w',
+    }
+    
+    if time_unit.lower() not in supported_time_units:
+        raise ValueError(
+            f"Unsupported time_unit '{time_unit}'. "
+            f"Supported units: {sorted(supported_time_units)}"
+        )
 
     ###########################################
     # Validate CI Parameters and Dependencies #
@@ -453,11 +473,20 @@ def evaluation(
 
     # Check threshold count and enforce limit if force_eval is False
     # Only count user-specified thresholds, not the forced 0 threshold
-    if len(user_threshold_list) > 10 and not force_eval:
+    # Only enforce limit when CI calculations are enabled (which makes evaluation computationally expensive)
+    ci_calculations_enabled = calculate_au_ci or calculate_threshold_ci
+    if len(user_threshold_list) > 10 and not force_eval and ci_calculations_enabled:
+        ci_types = []
+        if calculate_au_ci:
+            ci_types.append("AU CI")
+        if calculate_threshold_ci:
+            ci_types.append(f"threshold CI ({threshold_ci_method})")
+        ci_desc = " and ".join(ci_types)
+        
         raise ValueError(
-            f"Too many thresholds ({len(user_threshold_list)}) specified. "
-            f"Maximum allowed is 10 thresholds to prevent excessive computation. "
-            f"Use force_eval=True to bypass this check and evaluate all {len(user_threshold_list)} thresholds."
+            f"Too many thresholds ({len(user_threshold_list)}) specified with CI calculations enabled ({ci_desc}). "
+            f"Maximum allowed is 10 thresholds when CI calculations are enabled to prevent excessive computation. "
+            f"Use force_eval=True to bypass this check, or disable CI calculations for faster evaluation with many thresholds."
         )
 
     # Now generate the final threshold list including forced 0 if needed

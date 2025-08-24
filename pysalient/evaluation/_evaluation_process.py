@@ -11,6 +11,8 @@ try:
         average_precision_score,
         f1_score,
         roc_auc_score,
+        precision_recall_curve,
+        auc,
     )
 except ImportError:
     # Allow the module to be imported, but the function will fail if sklearn is needed.
@@ -18,6 +20,8 @@ except ImportError:
     average_precision_score = None
     accuracy_score = None
     f1_score = None
+    precision_recall_curve = None
+    auc = None
     warnings.warn(
         "scikit-learn not found. The 'evaluation' function requires scikit-learn "
         "for some metric calculations. Please install it (`pip install scikit-learn`).",
@@ -101,8 +105,9 @@ def _process_single_evaluation(
         timeseries_array: NumPy array containing time information (indices, floats, or timestamps)
                           corresponding to labels/probas, or None if not provided.
         timeseries_pa_type: Original PyArrow DataType of the timeseries column, or None.
-        time_unit: Unit of time if timeseries_array contains integers or floats (e.g., 'rows',
-                   'minutes'). Required if timeseries_pa_type is integer or floating.
+        time_unit: Time unit for calculation and column naming. Supports standard time units
+                   ('second', 'minute', 'hour', 'day', 'week') and common abbreviations.
+                   Time differences are calculated in seconds then converted to this unit.
         aggregation_keys: Tuple of values that identify this group (if aggregated) - NOW LARGELY UNUSED
         aggregation_cols: Column name for encounter aggregation (required for time-to-event calculations)
         time_to_event_cols: Dictionary mapping metric keys to clinical event column names for time-to-event metrics
@@ -188,7 +193,9 @@ def _process_single_evaluation(
         # Calculate overall metrics only if labels contain both classes
         if len(unique_labels) > 1:
             auroc = roc_auc_score(labels, probas)
-            auprc = average_precision_score(labels, probas)
+            # Use same AUPRC calculation as current_process.py for exact match
+            precision, recall, thresholds = precision_recall_curve(labels, probas)
+            auprc = auc(recall, precision)
         else:
             auroc = np.nan
             auprc = np.nan  # Or prevalence if preferred for single class
@@ -232,11 +239,15 @@ def _process_single_evaluation(
                     verbosity=verbosity,  # Pass verbosity
                 )
 
-                # Calculate CI for AUPRC
+                # Calculate CI for AUPRC using same method as point estimate
+                def _auprc_for_bootstrap(y_true_boot, y_pred_boot):
+                    precision_boot, recall_boot, _ = precision_recall_curve(y_true_boot, y_pred_boot)
+                    return auc(recall_boot, precision_boot)
+                
                 auprc_lower_ci, auprc_upper_ci = calculate_bootstrap_ci(
                     y_true=labels,
                     y_pred=probas,
-                    metric_func=average_precision_score,  # Pass the function itself
+                    metric_func=_auprc_for_bootstrap,  # Use same calculation method as point estimate
                     n_rounds=bootstrap_rounds,
                     alpha=ci_alpha,
                     seed=bootstrap_seed,  # Use same seed for consistency if set
@@ -590,23 +601,31 @@ def _process_single_evaluation(
                         tp_alert_timestamps = alert_timestamps_array[tp_mask]
                         tp_event_timestamps = clinical_event_arrays[event_key][tp_mask]
                         
-                        # Calculate time differences in hours (event - alert)
-                        # Handle temporal vs numeric data appropriately
+                        # Calculate time differences - always in seconds first for precision
+                        # Then convert to requested time_unit
                         if pa.types.is_temporal(timeseries_pa_type):
-                            # Both are temporal - calculate difference and convert to hours
-                            time_diffs = (tp_event_timestamps - tp_alert_timestamps).astype('timedelta64[h]').astype(float)
+                            # Both are temporal - calculate difference in seconds (preserves precision)
+                            time_diffs_seconds = (tp_event_timestamps - tp_alert_timestamps).astype('timedelta64[s]').astype(float)
                         else:
-                            # For numeric timestamps, assume same units and convert hours if needed
-                            # This is a simplified approach - may need refinement based on actual use case
-                            time_diffs = (tp_event_timestamps - tp_alert_timestamps).astype(float)
-                            if time_unit and time_unit.lower() != 'hours':
-                                # Basic unit conversion (extend as needed)
-                                if time_unit.lower() in ['minutes', 'mins']:
-                                    time_diffs = time_diffs / 60.0
-                                elif time_unit.lower() in ['seconds', 'secs']:
-                                    time_diffs = time_diffs / 3600.0
-                                elif time_unit.lower() in ['days']:
-                                    time_diffs = time_diffs * 24.0
+                            # For numeric timestamps, assume they are already in the correct unit
+                            time_diffs_seconds = (tp_event_timestamps - tp_alert_timestamps).astype(float)
+                        
+                        # Convert from seconds to requested time unit using a conversion factor
+                        # This avoids multiple if/else statements and maintains precision
+                        time_unit_conversions = {
+                            'second': 1.0, 'seconds': 1.0, 'sec': 1.0, 'secs': 1.0, 's': 1.0,
+                            'minute': 60.0, 'minutes': 60.0, 'min': 60.0, 'mins': 60.0, 'm': 60.0,
+                            'hour': 3600.0, 'hours': 3600.0, 'hr': 3600.0, 'hrs': 3600.0, 'h': 3600.0,
+                            'day': 86400.0, 'days': 86400.0, 'd': 86400.0,
+                            'week': 604800.0, 'weeks': 604800.0, 'w': 604800.0,
+                        }
+                        
+                        # Get conversion factor (default to hours for backward compatibility)
+                        time_unit_key = time_unit.lower() if time_unit else 'hour'
+                        conversion_factor = time_unit_conversions.get(time_unit_key, 3600.0)  # Default to hours
+                        
+                        # Convert to requested unit
+                        time_diffs = time_diffs_seconds / conversion_factor
                         
                         # Group by encounter and take max time per encounter (following notebook logic)
                         unique_encounters = np.unique(tp_encounter_ids)
@@ -822,19 +841,9 @@ def _process_single_evaluation(
         
         # Add time-to-event metrics if they were calculated
         if time_to_event_metrics:
-            # Apply rounding to time-to-event metrics if decimal_places is specified
-            if decimal_places is not None:
-                rounded_time_to_event_metrics = {}
-                for key, value in time_to_event_metrics.items():
-                    if "_from_first_alert_to_" in key:
-                        # This is a time metric (float) - round it
-                        rounded_time_to_event_metrics[key] = _safe_round(value, decimal_places)
-                    else:
-                        # This is a count metric (int) - don't round
-                        rounded_time_to_event_metrics[key] = value
-                final_time_to_event_metrics = rounded_time_to_event_metrics
-            else:
-                final_time_to_event_metrics = time_to_event_metrics
+            # DO NOT round time-to-event metrics here - preserve full precision for visualization
+            # The visualization layer will handle formatting according to decimal_places
+            final_time_to_event_metrics = time_to_event_metrics
             
             # Apply fillna to time-to-event metrics if requested
             if time_to_event_fillna is not None:
