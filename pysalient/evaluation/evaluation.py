@@ -67,10 +67,12 @@ def evaluation(
     modelid: str,
     filter_desc: str,
     thresholds: list[float] | tuple[float, ...] | tuple[float, float, float],
-    time_to_event_cols: dict[str, str] | None = None,  # NEW: Clinical event columns for time-to-event metrics
+    time_to_event_cols: dict[str, str]
+    | None = None,  # NEW: Clinical event columns for time-to-event metrics
     aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
     time_unit: str = "hour",  # NEW: Time unit for calculation and column naming in time-to-event metrics
-    time_to_event_fillna: float | None = None,  # NEW: Fill NaN values in time-to-event metrics
+    time_to_event_fillna: float
+    | None = None,  # NEW: Fill NaN values in time-to-event metrics
     force_threshold_zero: bool = True,
     decimal_places: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
@@ -238,12 +240,18 @@ def evaluation(
         if not isinstance(time_to_event_cols, dict):
             raise TypeError("Input 'time_to_event_cols' must be a dictionary or None.")
         if not time_to_event_cols:  # Check for empty dict
-            raise ValueError("Input 'time_to_event_cols' cannot be an empty dictionary.")
+            raise ValueError(
+                "Input 'time_to_event_cols' cannot be an empty dictionary."
+            )
         for key, value in time_to_event_cols.items():
             if not isinstance(key, str) or not isinstance(value, str):
-                raise TypeError("All keys and values in 'time_to_event_cols' must be strings.")
+                raise TypeError(
+                    "All keys and values in 'time_to_event_cols' must be strings."
+                )
             if not key or not value:  # Check for empty strings
-                raise ValueError("All keys and values in 'time_to_event_cols' must be non-empty strings.")
+                raise ValueError(
+                    "All keys and values in 'time_to_event_cols' must be non-empty strings."
+                )
 
     if not isinstance(aggregation_func, str):
         raise TypeError("Input 'aggregation_func' must be a string.")
@@ -257,7 +265,9 @@ def evaluation(
 
     # Validate that aggregation_func is a valid NumPy function
     if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
-        raise ValueError(f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function.")
+        raise ValueError(
+            f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function."
+        )
 
     # Validate time_unit if provided
     if not isinstance(time_unit, str) or not time_unit:
@@ -265,11 +275,27 @@ def evaluation(
 
     # Define supported time units for validation
     supported_time_units = {
-        'second', 'seconds', 'sec', 'secs', 's',
-        'minute', 'minutes', 'min', 'mins', 'm',
-        'hour', 'hours', 'hr', 'hrs', 'h',
-        'day', 'days', 'd',
-        'week', 'weeks', 'w',
+        "second",
+        "seconds",
+        "sec",
+        "secs",
+        "s",
+        "minute",
+        "minutes",
+        "min",
+        "mins",
+        "m",
+        "hour",
+        "hours",
+        "hr",
+        "hrs",
+        "h",
+        "day",
+        "days",
+        "d",
+        "week",
+        "weeks",
+        "w",
     }
 
     if time_unit.lower() not in supported_time_units:
@@ -412,11 +438,14 @@ def evaluation(
             if aggregation_cols_list:
                 # For time-to-event calculations, we need the first aggregation column
                 # (assuming single column for encounter grouping)
-                aggregation_cols = aggregation_cols_list[0] if isinstance(aggregation_cols_list, list) else aggregation_cols_list
+                aggregation_cols = (
+                    aggregation_cols_list[0]
+                    if isinstance(aggregation_cols_list, list)
+                    else aggregation_cols_list
+                )
             else:
                 # Empty list means no aggregation column available
                 aggregation_cols = None
-
 
     except KeyError as e:
         raise KeyError(f"Required metadata key missing: {e}") from e
@@ -436,13 +465,15 @@ def evaluation(
                 warnings.warn(
                     "time_to_event_cols provided but aggregation metadata not found. "
                     "Time-to-event calculations will be skipped.",
-                    UserWarning
+                    UserWarning,
                 )
         else:
             # Check that all specified clinical event columns exist
             for event_key, event_col in time_to_event_cols.items():
                 if event_col not in data.column_names:
-                    raise ValueError(f"Time-to-event column '{event_col}' (for key '{event_key}') not found in table.")
+                    raise ValueError(
+                        f"Time-to-event column '{event_col}' (for key '{event_key}') not found in table."
+                    )
 
             # Validate that time_to_event_cols contain timestamp columns
             for event_key, event_col in time_to_event_cols.items():
@@ -452,12 +483,14 @@ def evaluation(
                         f"time_to_event_cols['{event_key}'] = '{event_col}' is not a timestamp column "
                         f"(found {col_type}). Expected timestamp column for time calculations. "
                         f"This may cause calculation failures.",
-                        UserWarning
+                        UserWarning,
                     )
 
             # Check that aggregation column exists
             if aggregation_cols not in data.column_names:
-                raise ValueError(f"Aggregation column '{aggregation_cols}' (from metadata) not found in table.")
+                raise ValueError(
+                    f"Aggregation column '{aggregation_cols}' (from metadata) not found in table."
+                )
 
             time_to_event_enabled = True
     ################################
@@ -465,9 +498,7 @@ def evaluation(
     ################################
     try:
         # First generate thresholds without forcing 0 to count user-specified thresholds only
-        user_threshold_list = _generate_thresholds(
-            thresholds, include_zero=False
-        )
+        user_threshold_list = _generate_thresholds(thresholds, include_zero=False)
     except (ValueError, TypeError) as e:
         raise ValueError(f"Invalid threshold specification: {e}") from e
 
@@ -541,7 +572,6 @@ def evaluation(
         # Ensure integer type even if already binary
         labels_to_eval = labels_to_eval.astype(np.int8)
 
-
     #############################################################
     # 4. Perform Evaluation using processed probas and labels   #
     #############################################################
@@ -610,54 +640,60 @@ def evaluation(
         pa.field("threshold", pa.float64()),
     ]
 
-
     # Add overall metrics
-    schema_fields.extend([
-        # Overall Metrics
-        pa.field("AUROC", pa.float64()),
-        pa.field("AUROC_Lower_CI", pa.float64()),
-        pa.field("AUROC_Upper_CI", pa.float64()),
-        pa.field("AUPRC", pa.float64()),
-        pa.field("AUPRC_Lower_CI", pa.float64()),
-        pa.field("AUPRC_Upper_CI", pa.float64()),
-        pa.field("Prevalence", pa.float64()),
-        pa.field("Sample_Size", pa.int64()),  # Represents events or groups
-        pa.field("Label_Count", pa.int64()),  # Represents positive events or groups
-        # Confusion Matrix
-        pa.field("TP", pa.int64()),
-        pa.field("TN", pa.int64()),
-        pa.field("FP", pa.int64()),
-        pa.field("FN", pa.int64()),
-        # Threshold Metrics + CIs
-        pa.field("PPV", pa.float64()),
-        pa.field("PPV_Lower_CI", pa.float64()),
-        pa.field("PPV_Upper_CI", pa.float64()),
-        pa.field("Sensitivity", pa.float64()),
-        pa.field("Sensitivity_Lower_CI", pa.float64()),
-        pa.field("Sensitivity_Upper_CI", pa.float64()),
-        pa.field("Specificity", pa.float64()),
-        pa.field("Specificity_Lower_CI", pa.float64()),
-        pa.field("Specificity_Upper_CI", pa.float64()),
-        pa.field("NPV", pa.float64()),
-        pa.field("NPV_Lower_CI", pa.float64()),
-        pa.field("NPV_Upper_CI", pa.float64()),
-        pa.field("Accuracy", pa.float64()),
-        pa.field("Accuracy_Lower_CI", pa.float64()),
-        pa.field("Accuracy_Upper_CI", pa.float64()),
-        pa.field("F1_Score", pa.float64()),
-        pa.field("F1_Score_Lower_CI", pa.float64()),
-        pa.field("F1_Score_Upper_CI", pa.float64()),
-    ])
+    schema_fields.extend(
+        [
+            # Overall Metrics
+            pa.field("AUROC", pa.float64()),
+            pa.field("AUROC_Lower_CI", pa.float64()),
+            pa.field("AUROC_Upper_CI", pa.float64()),
+            pa.field("AUPRC", pa.float64()),
+            pa.field("AUPRC_Lower_CI", pa.float64()),
+            pa.field("AUPRC_Upper_CI", pa.float64()),
+            pa.field("Prevalence", pa.float64()),
+            pa.field("Sample_Size", pa.int64()),  # Represents events or groups
+            pa.field("Label_Count", pa.int64()),  # Represents positive events or groups
+            # Confusion Matrix
+            pa.field("TP", pa.int64()),
+            pa.field("TN", pa.int64()),
+            pa.field("FP", pa.int64()),
+            pa.field("FN", pa.int64()),
+            # Threshold Metrics + CIs
+            pa.field("PPV", pa.float64()),
+            pa.field("PPV_Lower_CI", pa.float64()),
+            pa.field("PPV_Upper_CI", pa.float64()),
+            pa.field("Sensitivity", pa.float64()),
+            pa.field("Sensitivity_Lower_CI", pa.float64()),
+            pa.field("Sensitivity_Upper_CI", pa.float64()),
+            pa.field("Specificity", pa.float64()),
+            pa.field("Specificity_Lower_CI", pa.float64()),
+            pa.field("Specificity_Upper_CI", pa.float64()),
+            pa.field("NPV", pa.float64()),
+            pa.field("NPV_Lower_CI", pa.float64()),
+            pa.field("NPV_Upper_CI", pa.float64()),
+            pa.field("Accuracy", pa.float64()),
+            pa.field("Accuracy_Lower_CI", pa.float64()),
+            pa.field("Accuracy_Upper_CI", pa.float64()),
+            pa.field("F1_Score", pa.float64()),
+            pa.field("F1_Score_Lower_CI", pa.float64()),
+            pa.field("F1_Score_Upper_CI", pa.float64()),
+        ]
+    )
 
     # Add dynamic time-to-event columns if enabled
     if time_to_event_enabled and time_to_event_cols is not None:
         for event_key in time_to_event_cols.keys():
             # Add 3 columns per event key
-            schema_fields.extend([
-                pa.field(f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}", pa.float64()),
-                pa.field(f"count_first_alerts_before_{event_key}", pa.int64()),
-                pa.field(f"count_first_alerts_after_or_at_{event_key}", pa.int64()),
-            ])
+            schema_fields.extend(
+                [
+                    pa.field(
+                        f"{aggregation_func}_{time_unit}_from_first_alert_to_{event_key}",
+                        pa.float64(),
+                    ),
+                    pa.field(f"count_first_alerts_before_{event_key}", pa.int64()),
+                    pa.field(f"count_first_alerts_after_or_at_{event_key}", pa.int64()),
+                ]
+            )
 
     result_schema = pa.schema(schema_fields)
 

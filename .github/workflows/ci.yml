@@ -20,33 +20,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+    - name: Setup pixi
+      uses: prefix-dev/setup-pixi@v0.8.1
       with:
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install and configure uv
-      run: |
-        # Download and run the installer
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-
-        # Add uv to PATH and make it available immediately
-        export PATH="$HOME/.cargo/bin:$PATH"
-        
-        # Verify uv is installed and show its location
-        which uv
-        uv --version
-
-    - name: Install dependencies
-      run: |
-        # Install directly into the GitHub Actions Python environment
-        uv pip install --system -e ".[dev,examples]" # Include dev and examples extras
+        pixi-version: v0.40.2
+        cache: true
 
     - name: Lint and format with Ruff
-      run: uv run ruff check . --fix
+      run: pixi run lint
 
     - name: Test with pytest and generate coverage
-      run: uv run pytest --cov=pysalient --cov-report=xml --cov-report=term-missing tests/
+      run: pixi run test --cov-report=xml
 
   update-version:
     # Run this job only when a tag starting with 'v' is pushed

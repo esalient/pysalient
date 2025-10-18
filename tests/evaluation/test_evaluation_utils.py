@@ -161,29 +161,43 @@ class TestGenerateThresholdsInvalidInputs:
 
     def test_invalid_type_input(self):
         """Test invalid input types raise TypeError."""
-        with pytest.raises(TypeError, match="Thresholds must be specified as a list or tuple"):
+        with pytest.raises(
+            TypeError, match="Thresholds must be specified as a list or tuple"
+        ):
             _generate_thresholds(0.5)  # Single number
 
-        with pytest.raises(TypeError, match="Thresholds must be specified as a list or tuple"):
+        with pytest.raises(
+            TypeError, match="Thresholds must be specified as a list or tuple"
+        ):
             _generate_thresholds("0.5")  # String
 
-        with pytest.raises(TypeError, match="Thresholds must be specified as a list or tuple"):
+        with pytest.raises(
+            TypeError, match="Thresholds must be specified as a list or tuple"
+        ):
             _generate_thresholds({0.5, 0.8})  # Set
 
     def test_non_numeric_values_in_list(self):
         """Test non-numeric values in list raise ValueError."""
-        with pytest.raises(ValueError, match="Explicit threshold list/tuple must contain numbers"):
+        with pytest.raises(
+            ValueError, match="Explicit threshold list/tuple must contain numbers"
+        ):
             _generate_thresholds([0.1, "0.5", 0.9])
 
-        with pytest.raises(ValueError, match="Explicit threshold list/tuple must contain numbers"):
+        with pytest.raises(
+            ValueError, match="Explicit threshold list/tuple must contain numbers"
+        ):
             _generate_thresholds([0.1, None, 0.9])
 
     def test_values_out_of_range(self):
         """Test values outside [0,1] raise ValueError."""
-        with pytest.raises(ValueError, match="All thresholds must be between 0.0 and 1.0"):
+        with pytest.raises(
+            ValueError, match="All thresholds must be between 0.0 and 1.0"
+        ):
             _generate_thresholds([0.1, 1.5, 0.9])
 
-        with pytest.raises(ValueError, match="All thresholds must be between 0.0 and 1.0"):
+        with pytest.raises(
+            ValueError, match="All thresholds must be between 0.0 and 1.0"
+        ):
             _generate_thresholds([-0.1, 0.5, 0.9])
 
     def test_range_invalid_step_zero(self):
@@ -198,20 +212,28 @@ class TestGenerateThresholdsInvalidInputs:
 
     def test_range_invalid_start_greater_than_stop(self):
         """Test range where start > stop raises ValueError."""
-        with pytest.raises(ValueError, match="Threshold range start cannot be greater than stop"):
+        with pytest.raises(
+            ValueError, match="Threshold range start cannot be greater than stop"
+        ):
             _generate_thresholds((0.8, 0.3, 0.1))
 
     def test_range_step_too_small(self):
         """Test range with extremely small step raises ValueError."""
-        with pytest.raises(ValueError, match="Threshold step must be positive and non-negligible"):
+        with pytest.raises(
+            ValueError, match="Threshold step must be positive and non-negligible"
+        ):
             _generate_thresholds((0.1, 0.5, 1e-12))
 
     def test_range_non_numeric_values(self):
         """Test range with non-numeric values raises ValueError."""
-        with pytest.raises(ValueError, match="Explicit threshold list/tuple must contain numbers"):
+        with pytest.raises(
+            ValueError, match="Explicit threshold list/tuple must contain numbers"
+        ):
             _generate_thresholds((0.1, "0.5", 0.1))
 
-        with pytest.raises(ValueError, match="Explicit threshold list/tuple must contain numbers"):
+        with pytest.raises(
+            ValueError, match="Explicit threshold list/tuple must contain numbers"
+        ):
             _generate_thresholds(("start", 0.5, 0.1))
 
 

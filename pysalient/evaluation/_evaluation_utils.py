@@ -31,17 +31,23 @@ def _generate_thresholds(
         # This handles cases like (0.2, 0.6, 0.8) which should be explicit values
         # Use a tolerance to handle floating point precision issues
         range_size = abs(stop - start)
-        if step > range_size * 1.1 and range_size > 0:  # 10% tolerance for floating point
+        if (
+            step > range_size * 1.1 and range_size > 0
+        ):  # 10% tolerance for floating point
             # Treat as explicit list instead of range
             thresholds_out = [float(t) for t in threshold_spec]
         else:
             # Treat as range specification
             if step == 0:
                 # Explicitly disallow zero step when it looks like a range spec
-                raise ValueError("Threshold step cannot be zero for range specification.")
+                raise ValueError(
+                    "Threshold step cannot be zero for range specification."
+                )
             if step < 0:
                 # We decided to only support positive steps for ranges
-                raise ValueError("Threshold step must be positive for range specification.")
+                raise ValueError(
+                    "Threshold step must be positive for range specification."
+                )
             if start > stop:
                 raise ValueError(
                     "Threshold range start cannot be greater than stop with a positive step."

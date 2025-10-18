@@ -15,5 +15,5 @@ __all__ = [
     "_MATPLOTLIB_AVAILABLE",
     "_SKLEARN_METRICS_AVAILABLE",
     "plt",
-    "Axes"
+    "Axes",
 ]

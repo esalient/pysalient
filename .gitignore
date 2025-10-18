@@ -164,8 +164,10 @@ cython_debug/
 # ruff
 .ruff_cache
 
-# uv
-uv.lock
+# pixi
+.pixi/
+pixi.lock
+
 # data folder
 data/*
 !data/.gitkeep
