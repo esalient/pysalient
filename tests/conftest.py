@@ -1,6 +1,7 @@
 """
 Pytest configuration for pysalient tests.
 """
+
 import sys
 from pathlib import Path
 

@@ -32,10 +32,13 @@ ANTIBIOTICS_EVENT_COL = "antibiotics_event"
 def base_metadata():
     """Base metadata required for evaluation."""
     from pysalient.evaluation import META_KEY_TIMESERIES_COL
+
     return {
         META_KEY_Y_PROBA.encode("utf-8"): PROBA_COL.encode("utf-8"),
         META_KEY_Y_LABEL.encode("utf-8"): LABEL_COL.encode("utf-8"),
-        META_KEY_AGGREGATION_COLS.encode("utf-8"): json.dumps([ENCOUNTER_COL]).encode("utf-8"),
+        META_KEY_AGGREGATION_COLS.encode("utf-8"): json.dumps([ENCOUNTER_COL]).encode(
+            "utf-8"
+        ),
         META_KEY_TIMESERIES_COL.encode("utf-8"): TIMESERIES_COL.encode("utf-8"),
     }
 
@@ -48,21 +51,42 @@ def time_to_event_data():
         ENCOUNTER_COL: ["ENC1", "ENC1", "ENC1", "ENC2", "ENC2", "ENC3", "ENC3", "ENC3"],
         PROBA_COL: [0.1, 0.6, 0.8, 0.3, 0.7, 0.2, 0.5, 0.9],
         LABEL_COL: [0, 1, 1, 0, 1, 0, 1, 1],
-        TIMESERIES_COL: pd.to_datetime([
-            "2023-01-01 10:00:00", "2023-01-01 11:00:00", "2023-01-01 12:00:00",  # ENC1
-            "2023-01-02 09:00:00", "2023-01-02 10:00:00",  # ENC2
-            "2023-01-03 08:00:00", "2023-01-03 09:00:00", "2023-01-03 10:00:00"   # ENC3
-        ]),
-        CULTURE_EVENT_COL: pd.to_datetime([
-            "2023-01-01 13:00:00", "2023-01-01 13:00:00", "2023-01-01 13:00:00",  # ENC1: 2 hrs after first alert
-            "2023-01-02 08:00:00", "2023-01-02 08:00:00",  # ENC2: 1 hr before first alert
-            "2023-01-03 11:00:00", "2023-01-03 11:00:00", "2023-01-03 11:00:00"   # ENC3: 2 hrs after first alert
-        ]),
-        ANTIBIOTICS_EVENT_COL: pd.to_datetime([
-            "2023-01-01 14:00:00", "2023-01-01 14:00:00", "2023-01-01 14:00:00",  # ENC1: 3 hrs after first alert
-            "2023-01-02 11:00:00", "2023-01-02 11:00:00",  # ENC2: 1 hr after first alert
-            "2023-01-03 07:00:00", "2023-01-03 07:00:00", "2023-01-03 07:00:00"   # ENC3: 1 hr before first alert
-        ])
+        TIMESERIES_COL: pd.to_datetime(
+            [
+                "2023-01-01 10:00:00",
+                "2023-01-01 11:00:00",
+                "2023-01-01 12:00:00",  # ENC1
+                "2023-01-02 09:00:00",
+                "2023-01-02 10:00:00",  # ENC2
+                "2023-01-03 08:00:00",
+                "2023-01-03 09:00:00",
+                "2023-01-03 10:00:00",  # ENC3
+            ]
+        ),
+        CULTURE_EVENT_COL: pd.to_datetime(
+            [
+                "2023-01-01 13:00:00",
+                "2023-01-01 13:00:00",
+                "2023-01-01 13:00:00",  # ENC1: 2 hrs after first alert
+                "2023-01-02 08:00:00",
+                "2023-01-02 08:00:00",  # ENC2: 1 hr before first alert
+                "2023-01-03 11:00:00",
+                "2023-01-03 11:00:00",
+                "2023-01-03 11:00:00",  # ENC3: 2 hrs after first alert
+            ]
+        ),
+        ANTIBIOTICS_EVENT_COL: pd.to_datetime(
+            [
+                "2023-01-01 14:00:00",
+                "2023-01-01 14:00:00",
+                "2023-01-01 14:00:00",  # ENC1: 3 hrs after first alert
+                "2023-01-02 11:00:00",
+                "2023-01-02 11:00:00",  # ENC2: 1 hr after first alert
+                "2023-01-03 07:00:00",
+                "2023-01-03 07:00:00",
+                "2023-01-03 07:00:00",  # ENC3: 1 hr before first alert
+            ]
+        ),
     }
 
     df = pd.DataFrame(data)
@@ -83,33 +107,39 @@ class TestTimeToEventParameterValidation:
         with pytest.raises(TypeError, match="must be a dictionary or None"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols="invalid"
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols="invalid",
             )
 
     def test_time_to_event_cols_validation_empty_dict(self, time_to_event_table):
         """Test that empty time_to_event_cols dict raises ValueError."""
         with pytest.raises(ValueError, match="cannot be an empty dictionary"):
             evaluation(
-                time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={}
+                time_to_event_table, "model", "filter", [0.5], time_to_event_cols={}
             )
 
-    def test_time_to_event_cols_validation_invalid_keys_values(self, time_to_event_table):
+    def test_time_to_event_cols_validation_invalid_keys_values(
+        self, time_to_event_table
+    ):
         """Test that non-string keys/values in time_to_event_cols raise TypeError."""
         with pytest.raises(TypeError, match="must be strings"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={123: "valid"}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={123: "valid"},
             )
 
         with pytest.raises(TypeError, match="must be strings"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"valid": 123}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"valid": 123},
             )
 
     def test_time_to_event_cols_validation_empty_strings(self, time_to_event_table):
@@ -117,33 +147,33 @@ class TestTimeToEventParameterValidation:
         with pytest.raises(ValueError, match="must be non-empty strings"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"": "valid"}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"": "valid"},
             )
 
         with pytest.raises(ValueError, match="must be non-empty strings"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"valid": ""}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"valid": ""},
             )
 
     def test_aggregation_func_validation_invalid_type(self, time_to_event_table):
         """Test that invalid aggregation_func type raises TypeError."""
         with pytest.raises(TypeError, match="must be a string"):
             evaluation(
-                time_to_event_table,
-                "model", "filter", [0.5],
-                aggregation_func=123
+                time_to_event_table, "model", "filter", [0.5], aggregation_func=123
             )
 
     def test_aggregation_func_validation_empty_string(self, time_to_event_table):
         """Test that empty aggregation_func raises ValueError."""
         with pytest.raises(ValueError, match="cannot be an empty string"):
             evaluation(
-                time_to_event_table,
-                "model", "filter", [0.5],
-                aggregation_func=""
+                time_to_event_table, "model", "filter", [0.5], aggregation_func=""
             )
 
     def test_aggregation_func_validation_invalid_function(self, time_to_event_table):
@@ -151,8 +181,10 @@ class TestTimeToEventParameterValidation:
         with pytest.raises(ValueError, match="not a valid NumPy aggregation function"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                aggregation_func="invalid_function"
+                "model",
+                "filter",
+                [0.5],
+                aggregation_func="invalid_function",
             )
 
     def test_missing_time_to_event_columns(self, time_to_event_table):
@@ -160,8 +192,10 @@ class TestTimeToEventParameterValidation:
         with pytest.raises(ValueError, match="not found in table"):
             evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"bc": "non_existent_column"}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"bc": "non_existent_column"},
             )
 
 
@@ -170,10 +204,7 @@ class TestTimeToEventBackwardCompatibility:
 
     def test_evaluation_without_time_to_event_cols(self, time_to_event_table):
         """Test that evaluation works normally when time_to_event_cols=None."""
-        result = evaluation(
-            time_to_event_table,
-            "model", "filter", [0.0, 0.5, 1.0]
-        )
+        result = evaluation(time_to_event_table, "model", "filter", [0.0, 0.5, 1.0])
 
         # Should return normal schema without time-to-event columns
         assert isinstance(result, pa.Table)
@@ -188,7 +219,9 @@ class TestTimeToEventBackwardCompatibility:
 
         # Should not have time-to-first-alert columns when timeseries_col is None
 
-    def test_evaluation_with_time_to_event_but_no_aggregation_metadata(self, time_to_event_data):
+    def test_evaluation_with_time_to_event_but_no_aggregation_metadata(
+        self, time_to_event_data
+    ):
         """Test warning when time_to_event_cols provided but no aggregation metadata."""
         # Create table without aggregation metadata
         metadata = {
@@ -200,8 +233,10 @@ class TestTimeToEventBackwardCompatibility:
         with pytest.warns(UserWarning, match="aggregation metadata not found"):
             result = evaluation(
                 table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"bc": CULTURE_EVENT_COL}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"bc": CULTURE_EVENT_COL},
             )
 
         # Should not have time-to-event columns
@@ -219,16 +254,18 @@ class TestTimeToEventBasicFunctionality:
         """Test time-to-event calculation with single event and median aggregation."""
         result = evaluation(
             time_to_event_table,
-            "model", "filter", [0.5],
+            "model",
+            "filter",
+            [0.5],
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
-            aggregation_func="median"
+            aggregation_func="median",
         )
 
         # Check schema includes new columns
         expected_columns = [
             "median_hour_from_first_alert_to_bc",
             "count_first_alerts_before_bc",
-            "count_first_alerts_after_or_at_bc"
+            "count_first_alerts_after_or_at_bc",
         ]
 
         for col in expected_columns:
@@ -244,21 +281,25 @@ class TestTimeToEventBasicFunctionality:
         # After groupby max per encounter: [2, -2, 2]
         # Median: 2 hrs
 
-        assert result_dict["median_hour_from_first_alert_to_bc"][0] == pytest.approx(2.0)
-        assert result_dict["count_first_alerts_before_bc"][0] == 2  # 2 encounters with positive time
-        assert result_dict["count_first_alerts_after_or_at_bc"][0] == 1  # 1 encounter with negative/zero time
+        assert result_dict["median_hour_from_first_alert_to_bc"][0] == pytest.approx(
+            2.0
+        )
+        assert (
+            result_dict["count_first_alerts_before_bc"][0] == 2
+        )  # 2 encounters with positive time
+        assert (
+            result_dict["count_first_alerts_after_or_at_bc"][0] == 1
+        )  # 1 encounter with negative/zero time
 
     def test_multiple_events(self, time_to_event_table):
         """Test time-to-event calculation with multiple clinical events."""
         result = evaluation(
             time_to_event_table,
-            "model", "filter", [0.5],
-
-            time_to_event_cols={
-                "bc": CULTURE_EVENT_COL,
-                "ab": ANTIBIOTICS_EVENT_COL
-            },
-            aggregation_func="median"
+            "model",
+            "filter",
+            [0.5],
+            time_to_event_cols={"bc": CULTURE_EVENT_COL, "ab": ANTIBIOTICS_EVENT_COL},
+            aggregation_func="median",
         )
 
         # Check schema includes columns for both events
@@ -285,10 +326,11 @@ class TestTimeToEventBasicFunctionality:
         for agg_func in ["mean", "min", "max", "std"]:
             result = evaluation(
                 time_to_event_table,
-                "model", "filter", [0.5],
-
+                "model",
+                "filter",
+                [0.5],
                 time_to_event_cols={"bc": CULTURE_EVENT_COL},
-                aggregation_func=agg_func
+                aggregation_func=agg_func,
             )
 
             expected_col = f"{agg_func}_hour_from_first_alert_to_bc"
@@ -308,19 +350,24 @@ class TestTimeToEventEdgeCases:
         data = {
             ENCOUNTER_COL: ["ENC1", "ENC2"],
             PROBA_COL: [0.3, 0.4],  # All predictions < 0.5
-            LABEL_COL: [1, 1],      # All positive labels
-            TIMESERIES_COL: pd.to_datetime(["2023-01-01 10:00:00", "2023-01-02 10:00:00"]),
-            CULTURE_EVENT_COL: pd.to_datetime(["2023-01-01 12:00:00", "2023-01-02 13:00:00"])
+            LABEL_COL: [1, 1],  # All positive labels
+            TIMESERIES_COL: pd.to_datetime(
+                ["2023-01-01 10:00:00", "2023-01-02 10:00:00"]
+            ),
+            CULTURE_EVENT_COL: pd.to_datetime(
+                ["2023-01-01 12:00:00", "2023-01-02 13:00:00"]
+            ),
         }
 
         table = pa.table(data).replace_schema_metadata(base_metadata)
 
         result = evaluation(
             table,
-            "model", "filter", [0.8],  # High threshold, no TPs since all probas < 0.5
-
+            "model",
+            "filter",
+            [0.8],  # High threshold, no TPs since all probas < 0.5
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
-            force_threshold_zero=False  # Don't include 0.0 threshold automatically
+            force_threshold_zero=False,  # Don't include 0.0 threshold automatically
         )
 
         result_dict = result.to_pydict()
@@ -337,17 +384,22 @@ class TestTimeToEventEdgeCases:
             ENCOUNTER_COL: ["ENC1", "ENC2"],
             PROBA_COL: [0.8, 0.9],
             LABEL_COL: [1, 1],
-            TIMESERIES_COL: pd.to_datetime(["2023-01-01 10:00:00", "2023-01-02 10:00:00"]),
-            CULTURE_EVENT_COL: pd.to_datetime(["2023-01-01 12:00:00", "2023-01-02 13:00:00"])  # 2 and 3 hrs later
+            TIMESERIES_COL: pd.to_datetime(
+                ["2023-01-01 10:00:00", "2023-01-02 10:00:00"]
+            ),
+            CULTURE_EVENT_COL: pd.to_datetime(
+                ["2023-01-01 12:00:00", "2023-01-02 13:00:00"]
+            ),  # 2 and 3 hrs later
         }
 
         table = pa.table(data).replace_schema_metadata(base_metadata)
 
         result = evaluation(
             table,
-            "model", "filter", [0.5],
-
-            time_to_event_cols={"bc": CULTURE_EVENT_COL}
+            "model",
+            "filter",
+            [0.5],
+            time_to_event_cols={"bc": CULTURE_EVENT_COL},
         )
 
         result_dict = result.to_pydict()
@@ -363,17 +415,22 @@ class TestTimeToEventEdgeCases:
             ENCOUNTER_COL: ["ENC1", "ENC2"],
             PROBA_COL: [0.8, 0.9],
             LABEL_COL: [1, 1],
-            TIMESERIES_COL: pd.to_datetime(["2023-01-01 12:00:00", "2023-01-02 13:00:00"]),
-            CULTURE_EVENT_COL: pd.to_datetime(["2023-01-01 10:00:00", "2023-01-02 10:00:00"])  # 2 and 3 hrs earlier
+            TIMESERIES_COL: pd.to_datetime(
+                ["2023-01-01 12:00:00", "2023-01-02 13:00:00"]
+            ),
+            CULTURE_EVENT_COL: pd.to_datetime(
+                ["2023-01-01 10:00:00", "2023-01-02 10:00:00"]
+            ),  # 2 and 3 hrs earlier
         }
 
         table = pa.table(data).replace_schema_metadata(base_metadata)
 
         result = evaluation(
             table,
-            "model", "filter", [0.5],
-
-            time_to_event_cols={"bc": CULTURE_EVENT_COL}
+            "model",
+            "filter",
+            [0.5],
+            time_to_event_cols={"bc": CULTURE_EVENT_COL},
         )
 
         result_dict = result.to_pydict()
@@ -386,15 +443,19 @@ class TestTimeToEventEdgeCases:
         """Test error when aggregation column doesn't exist in data."""
         # Create metadata pointing to non-existent aggregation column
         metadata = dict(base_metadata)
-        metadata[META_KEY_AGGREGATION_COLS.encode("utf-8")] = json.dumps(["non_existent_column"]).encode("utf-8")
+        metadata[META_KEY_AGGREGATION_COLS.encode("utf-8")] = json.dumps(
+            ["non_existent_column"]
+        ).encode("utf-8")
 
         table = time_to_event_data.replace_schema_metadata(metadata)
 
         with pytest.raises(ValueError, match="not found in table"):
             evaluation(
                 table,
-                "model", "filter", [0.5],
-                time_to_event_cols={"bc": CULTURE_EVENT_COL}
+                "model",
+                "filter",
+                [0.5],
+                time_to_event_cols={"bc": CULTURE_EVENT_COL},
             )
 
 
@@ -405,10 +466,11 @@ class TestTimeToEventIntegration:
         """Test complete pipeline with decimal rounding."""
         result = evaluation(
             time_to_event_table,
-            "model", "filter", [0.5],
-
+            "model",
+            "filter",
+            [0.5],
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
-            decimal_places=2
+            decimal_places=2,
         )
 
         result_dict = result.to_pydict()
@@ -425,9 +487,10 @@ class TestTimeToEventIntegration:
 
         result = evaluation(
             time_to_event_table,
-            "model", "filter", thresholds,
-
-            time_to_event_cols={"bc": CULTURE_EVENT_COL}
+            "model",
+            "filter",
+            thresholds,
+            time_to_event_cols={"bc": CULTURE_EVENT_COL},
         )
 
         assert result.num_rows == len(thresholds)
@@ -443,11 +506,12 @@ class TestTimeToEventIntegration:
         """Test that CI calculation works alongside time-to-event metrics."""
         result = evaluation(
             time_to_event_table,
-            "model", "filter", [0.5],
-
+            "model",
+            "filter",
+            [0.5],
             time_to_event_cols={"bc": CULTURE_EVENT_COL},
             calculate_threshold_ci=True,
-            bootstrap_rounds=100  # Small number for fast test
+            bootstrap_rounds=100,  # Small number for fast test
         )
 
         # Should have both CI columns and time-to-event columns

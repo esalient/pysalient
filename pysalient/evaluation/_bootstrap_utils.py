@@ -108,9 +108,9 @@ def calculate_bootstrap_ci(
         # Conditional logging based on verbosity
         if verbosity <= -2:  # Use DEBUG level for very detailed info
             logger.debug(
-                f"Bootstrap round {i+1}: Sample distribution - "
-                f"Positives: {pos_count} ({pos_count/len(bootstrap_labels):.1%}), "
-                f"Negatives: {neg_count} ({neg_count/len(bootstrap_labels):.1%})"
+                f"Bootstrap round {i + 1}: Sample distribution - "
+                f"Positives: {pos_count} ({pos_count / len(bootstrap_labels):.1%}), "
+                f"Negatives: {neg_count} ({neg_count / len(bootstrap_labels):.1%})"
             )
 
         # Handle potential errors during metric calculation within the loop
@@ -122,14 +122,14 @@ def calculate_bootstrap_ci(
                 # Log NaN results at INFO level if verbosity allows
                 if verbosity <= -1:
                     logger.info(
-                        f"Bootstrap round {i+1}: Metric func '{metric_func.__name__}' "
+                        f"Bootstrap round {i + 1}: Metric func '{metric_func.__name__}' "
                         f"returned NaN with {pos_count} positives and {neg_count} negatives"
                     )
             else:
                 # Log successful results at DEBUG level if verbosity allows
                 if verbosity <= -2:
                     logger.debug(
-                        f"Bootstrap round {i+1}: Metric func '{metric_func.__name__}' "
+                        f"Bootstrap round {i + 1}: Metric func '{metric_func.__name__}' "
                         f"returned {metric_result:.3f}"
                     )
 
@@ -137,7 +137,7 @@ def calculate_bootstrap_ci(
             # Log warnings only if verbosity allows (<= 0)
             if verbosity <= 0:
                 logger.warning(
-                    f"Bootstrap round {i+1}: Metric func '{metric_func.__name__}' failed "
+                    f"Bootstrap round {i + 1}: Metric func '{metric_func.__name__}' failed "
                     f"with error: {type(e).__name__} - {e}. "
                     f"Sample had {pos_count} positives and {neg_count} negatives. "
                     "Storing NaN.",

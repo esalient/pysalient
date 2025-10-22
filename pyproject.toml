@@ -59,6 +59,85 @@ Homepage = "https://github.com/esalient/pysalient"
 Repository = "https://github.com/esalient/pysalient"
 
 ########################
+## PIXI CONFIGURATION ##
+########################
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+[tool.pixi.dependencies]
+# Conda dependencies (prefer conda versions for better compatibility)
+# Install from conda-forge to get native library dependencies
+python = ">=3.11"
+pyarrow = "*"
+numpy = "*"
+pandas = "*"
+scikit-learn = "*"
+
+[tool.pixi.feature.dev.dependencies]
+# Development tools from conda
+pytest = "*"
+pytest-cov = "*"
+ruff = "*"
+mypy = "*"
+sphinx = "*"
+furo = "*"
+myst-parser = "*"
+jinja2 = "*"
+
+[tool.pixi.feature.examples.dependencies]
+jupyterlab = "*"
+ipykernel = "*"
+
+[tool.pixi.feature.plot.dependencies]
+matplotlib = "*"
+
+[tool.pixi.feature.pandera.dependencies]
+# Pandera for data validation with pandas support
+pandera = "*"
+
+[tool.pixi.feature.pandera-testing.dependencies]
+# Pandera with hypothesis and strategies for property-based testing
+pandera-strategies = "*"
+
+[tool.pixi.feature.pandera-io.dependencies]
+# Pandera with I/O and mypy support
+pandera-io = "*"
+pandera-mypy = "*"
+
+[tool.pixi.feature.pandera-dask.dependencies]
+# Pandera with dask support
+pandera-dask = "*"
+
+[tool.pixi.feature.pandera-pyspark.dependencies]
+# Pandera with pyspark support
+pandera-pyspark = "*"
+
+[tool.pixi.feature.pandera-polars.dependencies]
+# Pandera with polars support
+pandera-polars = "*"
+
+[tool.pixi.environments]
+default = { features = ["dev", "pandera"], solve-group = "default" }
+examples = { features = ["dev", "examples", "pandera"], solve-group = "default" }
+plot = { features = ["dev", "plot", "pandera"], solve-group = "default" }
+# Pandera environments with different backends
+pandera-testing = { features = ["dev", "pandera", "pandera-testing"], solve-group = "default" }
+pandera-full = { features = ["dev", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
+pandera-dask = { features = ["dev", "pandera", "pandera-dask"], solve-group = "default" }
+pandera-pyspark = { features = ["dev", "pandera", "pandera-pyspark"], solve-group = "default" }
+pandera-polars = { features = ["dev", "pandera", "pandera-polars"], solve-group = "default" }
+all = { features = ["dev", "examples", "plot", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
+
+[tool.pixi.tasks]
+test = "pytest --cov=pysalient --cov-report=term-missing --cov-report=html tests/"
+lint = "ruff check . --fix"
+format = "ruff format ."
+typecheck = "mypy pysalient"
+docs = "sphinx-build -b html docs/source docs/build"
+
+########################
 ## TOOL CONFIGURATION ##
 ########################
 

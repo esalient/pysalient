@@ -446,7 +446,9 @@ def test_evaluation_rounding(synth_table_with_metadata):
     decimal_places_to_test = 2
 
     expected_auroc = round(0.9375, decimal_places_to_test)  # 0.94
-    expected_auprc = round(0.94375, decimal_places_to_test)  # 0.94 (updated to corrected calculation)
+    expected_auprc = round(
+        0.94375, decimal_places_to_test
+    )  # 0.94 (updated to corrected calculation)
     expected_prevalence = round(4 / 8, decimal_places_to_test)  # 0.50
 
     expected_rows = [
@@ -867,12 +869,12 @@ def test_evaluation_with_au_ci_basic(synth_table_larger_with_metadata):
     for i in range(results.num_rows):
         for col in OVERALL_CI_COLS:  # OVERALL_CI_COLS refers to AUROC/AUPRC CIs
             ci_val = results_dict[col][i]
-            assert (
-                ci_val is not None
-            ), f"{col} should not be None when calculate_au_ci=True"
-            assert isinstance(
-                ci_val, float
-            ), f"{col} should be float, got {type(ci_val)}"
+            assert ci_val is not None, (
+                f"{col} should not be None when calculate_au_ci=True"
+            )
+            assert isinstance(ci_val, float), (
+                f"{col} should be float, got {type(ci_val)}"
+            )
             assert 0.0 <= ci_val <= 1.0, f"{col} value {ci_val} out of bounds [0, 1]"
         # Check lower <= upper
         assert results_dict["AUROC_Lower_CI"][i] <= results_dict["AUROC_Upper_CI"][i]
@@ -880,15 +882,15 @@ def test_evaluation_with_au_ci_basic(synth_table_larger_with_metadata):
 
         # Check that threshold CI columns ARE None
         for col in THRESHOLD_CI_COLS:
-            assert (
-                results_dict[col][i] is None
-            ), f"{col} should be None when calculate_threshold_ci=False"
+            assert results_dict[col][i] is None, (
+                f"{col} should be None when calculate_threshold_ci=False"
+            )
 
     # Check that the AU CI values are consistent across rows
     for col in OVERALL_CI_COLS:
-        assert (
-            len(set(results_dict[col])) == 1
-        ), f"{col} values should be identical across rows"
+        assert len(set(results_dict[col])) == 1, (
+            f"{col} values should be identical across rows"
+        )
 
 
 def test_evaluation_with_au_ci_reproducibility(synth_table_larger_with_metadata):
@@ -929,9 +931,9 @@ def test_evaluation_with_au_ci_reproducibility(synth_table_larger_with_metadata)
 
     # Check that the calculated AU CI values are identical
     for col in OVERALL_CI_COLS:  # OVERALL_CI_COLS refers to AUROC/AUPRC CIs
-        assert (
-            results1_dict[col] == results2_dict[col]
-        ), f"{col} values differ between runs with same seed"
+        assert results1_dict[col] == results2_dict[col], (
+            f"{col} values differ between runs with same seed"
+        )
 
 
 def test_evaluation_with_au_ci_different_alpha(synth_table_larger_with_metadata):
@@ -981,18 +983,18 @@ def test_evaluation_with_au_ci_different_alpha(synth_table_larger_with_metadata)
         ("AUPRC_Lower_CI", "AUPRC_Upper_CI"),
     ]:
         # Add tolerance for potential float comparison issues if CIs are very close
-        assert (
-            results_99_dict[lower_key][0] <= results_90_dict[lower_key][0] + 1e-9
-        ), f"99% {lower_key} should be <= 90% {lower_key}"
-        assert (
-            results_99_dict[upper_key][0] >= results_90_dict[upper_key][0] - 1e-9
-        ), f"99% {upper_key} should be >= 90% {upper_key}"
+        assert results_99_dict[lower_key][0] <= results_90_dict[lower_key][0] + 1e-9, (
+            f"99% {lower_key} should be <= 90% {lower_key}"
+        )
+        assert results_99_dict[upper_key][0] >= results_90_dict[upper_key][0] - 1e-9, (
+            f"99% {upper_key} should be >= 90% {upper_key}"
+        )
         # Also check that the 99% interval is strictly wider if not identical
         width_99 = results_99_dict[upper_key][0] - results_99_dict[lower_key][0]
         width_90 = results_90_dict[upper_key][0] - results_90_dict[lower_key][0]
-        assert (
-            width_99 >= width_90 - 1e-9
-        ), f"99% CI width for {lower_key[:-9]} should be >= 90% CI width"
+        assert width_99 >= width_90 - 1e-9, (
+            f"99% CI width for {lower_key[:-9]} should be >= 90% CI width"
+        )
         # Ensure width is non-negative
         assert width_99 >= 0
         assert width_90 >= 0
@@ -1106,24 +1108,24 @@ def test_evaluation_with_threshold_ci_basic(synth_table_larger_with_metadata):
     # Check that AU CI columns ARE None
     for i in range(results.num_rows):
         for col in OVERALL_CI_COLS:  # OVERALL_CI_COLS refers to AUROC/AUPRC CIs
-            assert (
-                results_dict[col][i] is None
-            ), f"{col} should be None when calculate_au_ci=False"
+            assert results_dict[col][i] is None, (
+                f"{col} should be None when calculate_au_ci=False"
+            )
 
         # Check that threshold CI columns are NOT None and plausible
         for col in THRESHOLD_CI_COLS:
             ci_val = results_dict[col][i]
-            assert (
-                ci_val is not None
-            ), f"{col} should not be None when calculate_threshold_ci=True at row {i}"
-            assert isinstance(
-                ci_val, float
-            ), f"{col} should be float, got {type(ci_val)} at row {i}"
+            assert ci_val is not None, (
+                f"{col} should not be None when calculate_threshold_ci=True at row {i}"
+            )
+            assert isinstance(ci_val, float), (
+                f"{col} should be float, got {type(ci_val)} at row {i}"
+            )
             # Allow NaNs for metrics like PPV/NPV/Spec/Sens if undefined in bootstrap sample
             if not np.isnan(ci_val):
-                assert (
-                    0.0 <= ci_val <= 1.0
-                ), f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                assert 0.0 <= ci_val <= 1.0, (
+                    f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                )
 
         # Check lower <= upper for threshold CIs
         for lower_key, upper_key in zip(
@@ -1274,16 +1276,16 @@ def test_evaluation_with_both_cis(synth_table_larger_with_metadata):
     for i in range(results.num_rows):
         for col in ALL_CI_COLS:
             ci_val = results_dict[col][i]
-            assert (
-                ci_val is not None
-            ), f"{col} should not be None when both flags are True at row {i}"
-            assert isinstance(
-                ci_val, float
-            ), f"{col} should be float, got {type(ci_val)} at row {i}"
+            assert ci_val is not None, (
+                f"{col} should not be None when both flags are True at row {i}"
+            )
+            assert isinstance(ci_val, float), (
+                f"{col} should be float, got {type(ci_val)} at row {i}"
+            )
             if not np.isnan(ci_val):
-                assert (
-                    0.0 <= ci_val <= 1.0
-                ), f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                assert 0.0 <= ci_val <= 1.0, (
+                    f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                )
 
         # Check lower <= upper for all CIs
         for lower_key, upper_key in zip(ALL_CI_COLS[::2], ALL_CI_COLS[1::2]):
@@ -1294,9 +1296,9 @@ def test_evaluation_with_both_cis(synth_table_larger_with_metadata):
 
     # Check AU CIs are consistent across rows
     for col in OVERALL_CI_COLS:  # OVERALL_CI_COLS refers to AUROC/AUPRC CIs
-        assert (
-            len(set(results_dict[col])) == 1
-        ), f"{col} values should be identical across rows"
+        assert len(set(results_dict[col])) == 1, (
+            f"{col} values should be identical across rows"
+        )
     # Check threshold CIs differ across rows
     if results.num_rows > 1:
         assert (
@@ -1351,17 +1353,17 @@ def test_evaluation_with_analytical_threshold_ci(
         for col in THRESHOLD_CI_COLS:
             if col not in ["F1_Score_Lower_CI", "F1_Score_Upper_CI"]:
                 ci_val = results_dict[col][i]
-                assert (
-                    ci_val is not None
-                ), f"{col} should not be None for {analytical_method} at row {i}"
-                assert isinstance(
-                    ci_val, float
-                ), f"{col} should be float, got {type(ci_val)} at row {i}"
+                assert ci_val is not None, (
+                    f"{col} should not be None for {analytical_method} at row {i}"
+                )
+                assert isinstance(ci_val, float), (
+                    f"{col} should be float, got {type(ci_val)} at row {i}"
+                )
                 # Allow NaNs for metrics like PPV/NPV/Spec/Sens if undefined at threshold
                 if not np.isnan(ci_val):
-                    assert (
-                        0.0 <= ci_val <= 1.0
-                    ), f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                    assert 0.0 <= ci_val <= 1.0, (
+                        f"{col} value {ci_val} out of bounds [0, 1] at row {i}"
+                    )
 
         # Check F1 CIs ARE NaN (or None) because analytical methods don't support F1
         assert all(
@@ -1381,9 +1383,9 @@ def test_evaluation_with_analytical_threshold_ci(
                 lower_val = results_dict[lower_key][i]
                 upper_val = results_dict[upper_key][i]
                 if not np.isnan(lower_val) and not np.isnan(upper_val):
-                    assert (
-                        lower_val <= upper_val
-                    ), f"{lower_key} > {upper_key} at row {i}"
+                    assert lower_val <= upper_val, (
+                        f"{lower_key} > {upper_key} at row {i}"
+                    )
 
 
 ##############################################
@@ -1514,7 +1516,21 @@ def test_evaluation_with_aggregation_differs_from_non_aggregation(
 def test_evaluation_force_eval_with_many_thresholds(synth_table_with_metadata):
     """Test that force_eval=True allows evaluation with more than 10 thresholds."""
     # Create a threshold list with more than 10 values
-    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    many_thresholds = [
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+    ]
 
     # Should work with force_eval=True
     result = evaluation(
@@ -1522,28 +1538,46 @@ def test_evaluation_force_eval_with_many_thresholds(synth_table_with_metadata):
         "test_model",
         "test_filter",
         many_thresholds,
-        force_eval=True
+        force_eval=True,
     )
 
     # Should return results for all thresholds (plus 0.0 which is added by default)
-    expected_threshold_count = len(set([0.0] + many_thresholds))  # Remove duplicates and add 0.0
+    expected_threshold_count = len(
+        set([0.0] + many_thresholds)
+    )  # Remove duplicates and add 0.0
     assert len(result) == expected_threshold_count
 
     # Verify all thresholds are present in results
-    result_thresholds = set(result['threshold'].to_pylist())
+    result_thresholds = set(result["threshold"].to_pylist())
     expected_thresholds = set([0.0] + many_thresholds)
     assert result_thresholds == expected_thresholds
 
 
-def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(synth_table_with_metadata):
+def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(
+    synth_table_with_metadata,
+):
     """Test that force_eval=False blocks evaluation with >10 thresholds when CI calculations are enabled."""
     # Create a threshold list with more than 10 values
-    many_thresholds = [0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
+    many_thresholds = [
+        0.1,
+        0.15,
+        0.2,
+        0.25,
+        0.3,
+        0.35,
+        0.4,
+        0.45,
+        0.5,
+        0.55,
+        0.6,
+        0.65,
+        0.7,
+    ]
 
     # Should raise ValueError with CI enabled and force_eval=False (default)
     with pytest.raises(
         ValueError,
-        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True",
     ):
         evaluation(
             synth_table_with_metadata,
@@ -1551,7 +1585,7 @@ def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(synth_table_
             "test_filter",
             many_thresholds,
             calculate_threshold_ci=True,  # CI enabled - should trigger limit
-            force_eval=False
+            force_eval=False,
         )
 
     # Should work fine without CI enabled (new behavior)
@@ -1560,7 +1594,7 @@ def test_evaluation_force_eval_false_blocks_many_thresholds_with_ci(synth_table_
         "test_model",
         "test_filter",
         many_thresholds,
-        calculate_threshold_ci=False  # No CI - should allow many thresholds
+        calculate_threshold_ci=False,  # No CI - should allow many thresholds
     )
     assert result.num_rows == len(many_thresholds) + 1  # +1 for automatic 0.0
 
@@ -1572,17 +1606,16 @@ def test_evaluation_force_eval_allows_exactly_10_thresholds(synth_table_with_met
 
     # Should work without force_eval=True
     result = evaluation(
-        synth_table_with_metadata,
-        "test_model",
-        "test_filter",
-        exactly_10_thresholds
+        synth_table_with_metadata, "test_model", "test_filter", exactly_10_thresholds
     )
 
     # Should return results (0.0 added by default makes 11 total)
     assert len(result) == 11  # 10 + 0.0
 
 
-def test_evaluation_force_eval_with_range_specification_and_ci(synth_table_with_metadata):
+def test_evaluation_force_eval_with_range_specification_and_ci(
+    synth_table_with_metadata,
+):
     """Test force_eval with range specification that generates many thresholds when CI is enabled."""
     # Create a range that generates more than 10 thresholds
     # (0.0, 1.0, 0.05) should generate 21 thresholds: 0.0, 0.05, 0.10, ..., 1.0
@@ -1591,14 +1624,14 @@ def test_evaluation_force_eval_with_range_specification_and_ci(synth_table_with_
     # Should raise without force_eval when CI is enabled
     with pytest.raises(
         ValueError,
-        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True"
+        match=r"Too many thresholds \(\d+\) specified with CI calculations enabled.*Use force_eval=True",
     ):
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
             many_threshold_range,
-            calculate_au_ci=True  # CI enabled - should trigger limit
+            calculate_au_ci=True,  # CI enabled - should trigger limit
         )
 
     # Should work with force_eval=True even with CI
@@ -1609,14 +1642,16 @@ def test_evaluation_force_eval_with_range_specification_and_ci(synth_table_with_
         many_threshold_range,
         calculate_au_ci=True,
         force_eval=True,
-        bootstrap_rounds=100  # Reduce for faster test
+        bootstrap_rounds=100,  # Reduce for faster test
     )
 
     # Should return results for all generated thresholds
     assert len(result) == 21  # 0.0, 0.05, 0.10, ..., 1.0
 
 
-def test_evaluation_force_eval_error_message_accuracy_with_ci(synth_table_with_metadata):
+def test_evaluation_force_eval_error_message_accuracy_with_ci(
+    synth_table_with_metadata,
+):
     """Test that the error message shows the correct threshold count when CI is enabled."""
     # Create 15 thresholds
     threshold_list = [i * 0.05 for i in range(1, 16)]  # [0.05, 0.10, ..., 0.75]
@@ -1627,7 +1662,7 @@ def test_evaluation_force_eval_error_message_accuracy_with_ci(synth_table_with_m
             "test_model",
             "test_filter",
             threshold_list,
-            calculate_au_ci=True  # Enable CI to trigger the limit
+            calculate_au_ci=True,  # Enable CI to trigger the limit
         )
 
     error_msg = str(exc_info.value)
@@ -1638,10 +1673,25 @@ def test_evaluation_force_eval_error_message_accuracy_with_ci(synth_table_with_m
     assert "CI calculations enabled" in error_msg
 
 
-def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(synth_table_with_metadata):
+def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(
+    synth_table_with_metadata,
+):
     """Test that threshold counting considers unique thresholds only when CI is enabled."""
     # Create list with duplicates that results in <= 10 unique thresholds
-    thresholds_with_duplicates = [0.1, 0.1, 0.2, 0.2, 0.3, 0.3, 0.4, 0.4, 0.5, 0.5, 0.6, 0.6]
+    thresholds_with_duplicates = [
+        0.1,
+        0.1,
+        0.2,
+        0.2,
+        0.3,
+        0.3,
+        0.4,
+        0.4,
+        0.5,
+        0.5,
+        0.6,
+        0.6,
+    ]
     # Unique: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6] = 6 unique + 0.0 = 7 total
 
     # Should work with CI enabled since unique count <= 10
@@ -1651,7 +1701,7 @@ def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(synth_table
         "test_filter",
         thresholds_with_duplicates,
         calculate_threshold_ci=True,
-        bootstrap_rounds=100  # Small number for faster test
+        bootstrap_rounds=100,  # Small number for faster test
     )
 
     # Should return results for unique thresholds only
@@ -1659,16 +1709,39 @@ def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(synth_table
 
     # Now test with duplicates that result in > 10 unique thresholds
     many_thresholds_with_duplicates = [
-        0.1, 0.1, 0.15, 0.15, 0.2, 0.2, 0.25, 0.25, 0.3, 0.3,
-        0.35, 0.35, 0.4, 0.4, 0.45, 0.45, 0.5, 0.5, 0.55, 0.55, 0.6, 0.6
+        0.1,
+        0.1,
+        0.15,
+        0.15,
+        0.2,
+        0.2,
+        0.25,
+        0.25,
+        0.3,
+        0.3,
+        0.35,
+        0.35,
+        0.4,
+        0.4,
+        0.45,
+        0.45,
+        0.5,
+        0.5,
+        0.55,
+        0.55,
+        0.6,
+        0.6,
     ]
     # Unique: 11 thresholds + 0.0 = 12 total
 
-    with pytest.raises(ValueError, match=r"Too many thresholds.*CI calculations enabled.*Use force_eval=True"):
+    with pytest.raises(
+        ValueError,
+        match=r"Too many thresholds.*CI calculations enabled.*Use force_eval=True",
+    ):
         evaluation(
             synth_table_with_metadata,
             "test_model",
             "test_filter",
             many_thresholds_with_duplicates,
-            calculate_threshold_ci=True  # Enable CI to trigger the limit
+            calculate_threshold_ci=True,  # Enable CI to trigger the limit
         )

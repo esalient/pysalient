@@ -16,13 +16,45 @@ In order to modify the source code, `git` is required.
 
 ### Local install
 
-To install the package locally for development, create an environment (python 3.11), we recommend using [uv](https://astral.sh/blog/uv) with [venv](https://docs.astral.sh/uv/pip/environments/)
+To install the package locally for development, we recommend using [pixi](https://pixi.sh), which manages both conda and PyPI dependencies seamlessly.
+
+#### Install pixi
+
+If you don't have pixi installed yet:
 
 ```bash
-uv venv --python 3.11
-# activate
-source .venv/bin/activate # windows: .\.venv\Scripts\activate
-uv pip install -e ".[dev]"
+# Linux & macOS
+curl -fsSL https://pixi.sh/install.sh | bash
+
+# Windows (PowerShell)
+iwr -useb https://pixi.sh/install.ps1 | iex
+```
+
+#### Setup development environment
+
+```bash
+# Install the default development environment
+pixi install
+
+# Activate the environment (optional - pixi run commands work without activation)
+pixi shell
+
+# Or run commands directly without activating
+pixi run test
+pixi run lint
+```
+
+#### Available environments
+
+- `default` - Core development tools (pytest, ruff, mypy, sphinx)
+- `examples` - Development tools + Jupyter (for running notebooks)
+- `plot` - Development tools + matplotlib
+- `all` - All features combined
+
+```bash
+# Use a specific environment
+pixi shell -e examples  # For Jupyter notebooks
+pixi shell -e all       # For everything
 ```
 
 ## Tools
