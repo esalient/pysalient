@@ -1,3 +1,7 @@
-To report a security vulnerability to pySALIENT, please navigate to https://tidelift.com/security to see instructions.
+# Reporting Security Issues
 
-The tidelift report procedure is outlined [here](https://support.tidelift.com/hc/en-us/articles/4406287910036-Security-process).
+We appreciate your efforts to responsibly disclose your findings, and will make every effort to acknowledge your contributions.
+
+To report a security issue, please use the GitHub Security Advisory ["Report a Vulnerability"](https://github.com/prefix-dev/pixi/security/advisories/new) tab.
+
+We will send a response indicating the next steps in handling your report.
