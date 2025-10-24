@@ -120,3 +120,41 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.pixi.project]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "osx-64", "win-64"]
+
+[tool.pixi.pypi-dependencies]
+pysalient = { path = ".", editable = true }
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+pyarrow = "*"
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+
+[tool.pixi.feature.dev.dependencies]
+furo = "*"
+mypy = "*"
+myst-parser = "*"
+pytest = "*"
+pytest-cov = "*"
+ruff = "*"
+sphinx = "*"
+jinja2 = "*"
+pandera = "*"
+hypothesis = "*"
+
+[tool.pixi.feature.examples.dependencies]
+ipykernel = "*"
+jupyterlab = "*"
+
+[tool.pixi.feature.plot.dependencies]
+matplotlib = "*"
+
+[tool.pixi.environments]
+default = { features = ["dev"], solve-group = "default" }
+examples = { features = ["dev", "examples"], solve-group = "default" }
+plot = { features = ["dev", "plot"], solve-group = "default" }
