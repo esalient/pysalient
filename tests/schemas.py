@@ -5,9 +5,8 @@ This module defines schemas using pandera for validating test data structures,
 replacing the need for static parquet files in tests.
 """
 
-import pandera as pa
 import pandas as pd
-
+import pandera as pa
 
 # Use DataFrameSchema for better compatibility
 evaluation_data_schema = pa.DataFrameSchema(
@@ -229,9 +228,9 @@ Use cases:
 evaluation_results_schema = pa.DataFrameSchema(
     {
         "metric_name": pa.Column(str, nullable=False),
-        "metric_value": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
-        "ci_lower": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
-        "ci_upper": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
+        "metric_value": pa.Column(float, nullable=False),  # No range constraint - metrics can exceed [0,1]
+        "ci_lower": pa.Column(float, nullable=False),  # No range constraint - depends on metric type
+        "ci_upper": pa.Column(float, nullable=False),  # No range constraint - depends on metric type
         "n_samples": pa.Column(int, pa.Check.greater_than(0), nullable=False),
         "threshold": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=True, required=False),
         "prevalence": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=True, required=False),
@@ -254,10 +253,10 @@ model identification. This flexibility enables validation across different
 evaluation contexts from basic performance reporting to detailed comparative analyses.
 
 Columns:
-    metric_name: String identifier for the metric (e.g., "accuracy", "f1_score") (required)
-    metric_value: Computed metric value, constrained to range [0.0, 1.0] (required)
-    ci_lower: Lower bound of confidence interval, range [0.0, 1.0] (required)
-    ci_upper: Upper bound of confidence interval, range [0.0, 1.0] (required)
+    metric_name: String identifier for the metric (e.g., "AUROC", "log_loss", "MSE") (required)
+    metric_value: Computed metric value (no range constraint - some metrics like MSE, log loss can exceed 1.0) (required)
+    ci_lower: Lower bound of confidence interval (range depends on metric type) (required)
+    ci_upper: Upper bound of confidence interval (range depends on metric type) (required)
     n_samples: Number of samples used in metric computation, must be > 0 (required)
     threshold: Classification threshold used for metric computation, range [0.0, 1.0] (optional)
     prevalence: Class prevalence in the evaluation set, range [0.0, 1.0] (optional)
@@ -399,4 +398,129 @@ Example structure:
     | enc_2        | 15.0            | infection    | 0          | 0.15             | 1.0         |
     | enc_2        | 15.0            | mortality    | 0          | 0.08             | 2.0         |
     | enc_2        | 15.0            | readmission  | 0          | 0.23             | 1.5         |
+"""
+
+
+evaluation_data_event_level_schema = pa.DataFrameSchema(
+    {
+        "encounter_id": pa.Column(str, nullable=False),
+        "event_timestamp": pa.Column(float, pa.Check.greater_than_or_equal_to(0.0), nullable=False),
+        "culture_event": pa.Column(float, pa.Check.isin([0.0, 1.0]), nullable=True, required=False),
+        "suspected_infection": pa.Column(float, pa.Check.isin([0.0, 1.0]), nullable=True, required=False),
+        "true_label": pa.Column(int, pa.Check.isin([0, 1]), nullable=False),
+        "prediction_proba_1": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
+        "prediction_proba_2": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=True, required=False),
+    },
+    coerce=True,
+    strict=False
+)
+evaluation_data_event_level_schema.__doc__ = """
+Schema for event-level evaluation data with multiple rows per encounter.
+
+This schema validates time-series medical data where each encounter is represented
+by multiple rows, with each row capturing a specific event or measurement at a
+particular timestamp within that encounter. This is the typical format for raw
+clinical data before aggregation.
+
+**Use this schema for:**
+    - Validating raw clinical time-series data with multiple observations per patient
+    - Multi-step temporal sequences within a single encounter (e.g., vital sign measurements,
+      lab results at different time points)
+    - Data with repeated events (cultures, suspected infections) at different times
+    - Pre-aggregation evaluation where the evaluation() function processes temporal sequences
+
+**Data Structure:**
+    - encounter_id: String identifier allowing duplicates - same encounter appears multiple times
+    - event_timestamp: Numeric timestamp (float >= 0.0) marking when each event occurred
+    - culture_event: Binary indicator (0.0 or 1.0) for culture event presence (optional)
+    - suspected_infection: Binary indicator (0.0 or 1.0) for suspected infection (optional)
+    - true_label: Binary ground truth label (0 or 1) for the clinical outcome (required)
+    - prediction_proba_1: Model probability prediction, range [0.0, 1.0] (required)
+    - prediction_proba_2: Alternative model probability prediction, range [0.0, 1.0] (optional)
+
+**Key Characteristics:**
+    - Multiple rows per encounter (e.g., 212 rows/encounter in anonymised_sample.parquet)
+    - ALLOWS encounter_id duplicates (no uniqueness constraint)
+    - Preserves temporal granularity of clinical events
+    - pysalient.evaluation.evaluation() accepts this format directly without internal aggregation
+
+**Example:**
+    | encounter_id | event_timestamp | true_label | prediction_proba_1 |
+    |--------------|-----------------|------------|------------------|
+    | ENC001       | 1.0             | 0          | 0.3               |
+    | ENC001       | 2.0             | 0          | 0.5               |  <- Same encounter, different time
+    | ENC001       | 3.5             | 1          | 0.7               |
+    | ENC002       | 1.2             | 1          | 0.8               |
+
+**Schema Properties:**
+    - coerce: True (automatic type conversion for data ingestion)
+    - strict: False (allow extra columns like metadata or raw measurements)
+
+**Related schemas:**
+    - evaluation_data_encounter_level_schema: For aggregated data with one row per encounter
+    - evaluation_data_schema: Legacy event-level schema, similar structure
+"""
+
+
+evaluation_data_encounter_level_schema = pa.DataFrameSchema(
+    {
+        "encounter_id": pa.Column(str, nullable=False, unique=True),
+        "event_timestamp": pa.Column(float, pa.Check.greater_than_or_equal_to(0.0), nullable=False),
+        "culture_event": pa.Column(float, pa.Check.isin([0.0, 1.0]), nullable=True, required=False),
+        "suspected_infection": pa.Column(float, pa.Check.isin([0.0, 1.0]), nullable=True, required=False),
+        "true_label": pa.Column(int, pa.Check.isin([0, 1]), nullable=False),
+        "prediction_proba_1": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=False),
+        "prediction_proba_2": pa.Column(float, pa.Check.in_range(0.0, 1.0), nullable=True, required=False),
+    },
+    coerce=True,
+    strict=False
+)
+evaluation_data_encounter_level_schema.__doc__ = """
+Schema for encounter-level evaluation data with one row per encounter (aggregated).
+
+This schema validates aggregated clinical data where each encounter is represented
+by exactly one row. This format is produced after temporal aggregation of event-level
+data, where multiple observations per encounter have been collapsed into summary
+statistics or final values (e.g., final prediction probability, aggregated label).
+
+**Use this schema for:**
+    - Validating aggregated/summarized evaluation data with one row per encounter
+    - Post-processing clinical datasets after temporal aggregation
+    - Comparison data where multiple encounters must be distinct entities
+    - Data where temporal sequences have been reduced to single representative values
+
+**Data Structure:**
+    - encounter_id: String identifier with UNIQUE constraint - each encounter appears exactly once
+    - event_timestamp: Numeric timestamp (float >= 0.0), typically represents aggregation time
+    - culture_event: Binary indicator (0.0 or 1.0) for culture event presence (optional)
+    - suspected_infection: Binary indicator (0.0 or 1.0) for suspected infection (optional)
+    - true_label: Binary ground truth label (0 or 1) aggregated across the encounter (required)
+    - prediction_proba_1: Aggregated model probability prediction, range [0.0, 1.0] (required)
+    - prediction_proba_2: Alternative aggregated probability prediction, range [0.0, 1.0] (optional)
+
+**Key Characteristics:**
+    - Exactly one row per encounter (uniqueness enforced at schema validation)
+    - ENFORCES encounter_id uniqueness constraint
+    - Represents collapsed temporal sequences from event-level data
+    - pysalient.evaluation.evaluation() can accept pre-aggregated data in this format
+
+**Example:**
+    | encounter_id | event_timestamp | true_label | prediction_proba_1 |
+    |--------------|-----------------|------------|------------------|
+    | ENC001       | 3.5             | 1          | 0.7               |  <- Aggregated across 3 earlier events
+    | ENC002       | 1.2             | 1          | 0.8               |  <- Aggregated across N events
+    | ENC003       | 5.0             | 0          | 0.2               |
+
+**Schema Properties:**
+    - coerce: True (automatic type conversion for data ingestion)
+    - strict: False (allow extra columns like aggregation metadata)
+    - unique=True on encounter_id (enforces one row per encounter)
+
+**Relationship to event-level data:**
+    - event-level: 500 encounters × 212 rows/encounter = 106,000 rows total
+    - encounter-level: 500 encounters × 1 row/encounter = 500 rows total
+
+**Related schemas:**
+    - evaluation_data_event_level_schema: For multi-row event-level data before aggregation
+    - evaluation_data_schema: Legacy event-level schema, similar but without uniqueness constraint
 """

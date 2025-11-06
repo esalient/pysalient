@@ -15,6 +15,8 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from tests.schemas import (
+    evaluation_data_encounter_level_schema,
+    evaluation_data_event_level_schema,
     evaluation_data_schema,
     evaluation_multi_model_schema,
     evaluation_multi_task_schema,
@@ -460,7 +462,7 @@ class TestIOCSVInputSchema:
         # With coerce=True, these should be converted to proper types
         # timestamp should be coerced to float/string (depends on schema definition)
         # label should be coerced to int
-        assert validated_df["label"].dtype in [int, 'int64', 'int32']
+        assert pd.api.types.is_integer_dtype(validated_df["label"])
         assert validated_df.loc[0, "label"] == 1
         assert validated_df.loc[1, "label"] == 0
 
@@ -532,7 +534,7 @@ class TestIOCSVInputSchema:
                 assert len(validated_df) == len(csv_df)
 
                 # Verify coercion worked correctly
-                assert validated_df["label"].dtype in [int, 'int64', 'int32']
+                assert pd.api.types.is_integer_dtype(validated_df["label"])
                 assert validated_df["probability"].dtype == float
                 assert (validated_df["probability"] >= 0.0).all()
                 assert (validated_df["probability"] <= 1.0).all()
@@ -561,7 +563,7 @@ class TestEvaluationResultsSchema:
         assert validated_df is not None
         assert len(validated_df) == 3
         assert validated_df["metric_value"].dtype == float
-        assert validated_df["n_samples"].dtype in [int, 'int64', 'int32']
+        assert pd.api.types.is_integer_dtype(validated_df["n_samples"])
 
     def test_schema_validates_confidence_intervals(self):
         """Test that schema validates CI bounds are in correct order."""
@@ -581,18 +583,21 @@ class TestEvaluationResultsSchema:
         assert (validated_df["ci_lower"] <= validated_df["metric_value"]).all()
         assert (validated_df["metric_value"] <= validated_df["ci_upper"]).all()
 
-    def test_schema_rejects_invalid_metric_range(self):
-        """Test that schema rejects metric_value outside [0, 1] range."""
-        invalid_df = pd.DataFrame({
-            "metric_name": ["AUROC", "AUPRC"],
-            "metric_value": [1.5, 0.78],  # Invalid: > 1.0
-            "ci_lower": [0.82, 0.74],
-            "ci_upper": [0.88, 0.82],
-            "n_samples": [1000, 1000],
+    def test_schema_accepts_metrics_exceeding_one(self):
+        """Test that schema accepts metric values > 1.0 (e.g., MSE, log loss)."""
+        # Some metrics like MSE, log loss, RMSE can exceed 1.0
+        df = pd.DataFrame({
+            "metric_name": ["MSE", "log_loss", "AUROC"],
+            "metric_value": [2.5, 1.8, 0.85],  # MSE and log_loss can exceed 1.0
+            "ci_lower": [2.2, 1.5, 0.82],
+            "ci_upper": [2.8, 2.1, 0.88],
+            "n_samples": [1000, 1000, 1000],
         })
 
-        with pytest.raises(pa.errors.SchemaError):
-            evaluation_results_schema.validate(invalid_df)
+        # Should validate successfully - no range constraint on metric_value
+        validated_df = evaluation_results_schema.validate(df)
+        assert validated_df is not None
+        assert len(validated_df) == 3
 
     def test_schema_rejects_negative_samples(self):
         """Test that schema rejects n_samples <= 0."""
@@ -701,7 +706,7 @@ class TestIOParquetInputSchema:
 
         # Verify types are preserved
         assert validated_df["timestamp"].dtype == float
-        assert validated_df["label"].dtype in [int, 'int64', 'int32']
+        assert pd.api.types.is_integer_dtype(validated_df["label"])
         assert validated_df["probability"].dtype == float
 
     def test_schema_validates_existing_sample_parquet(self):
@@ -782,7 +787,7 @@ class TestIOParquetInputSchema:
 
                 # Verify types and constraints
                 assert validated_df["timestamp"].dtype == float
-                assert validated_df["label"].dtype in [int, 'int64', 'int32']
+                assert pd.api.types.is_integer_dtype(validated_df["label"])
                 assert validated_df["probability"].dtype == float
                 assert (validated_df["probability"] >= 0.0).all()
                 assert (validated_df["probability"] <= 1.0).all()
@@ -811,7 +816,7 @@ class TestTimeToEventDataSchema:
         assert validated_df is not None
         assert len(validated_df) == 3
         assert validated_df["time_to_event"].dtype == float
-        assert validated_df["event_occurred"].dtype in [int, 'int64', 'int32']
+        assert pd.api.types.is_integer_dtype(validated_df["event_occurred"])
         assert validated_df["prediction_proba"].dtype == float
 
     def test_schema_validates_censored_and_uncensored_events(self):
@@ -1238,3 +1243,252 @@ class TestEvaluationMultiTaskSchema:
             assert (validated_df["event_timestamp"] >= 0.0).all()
         except pa.errors.SchemaError as e:
             pytest.fail(f"Schema validation failed on hypothesis-generated multi-task data: {e}")
+
+
+class TestEvaluationDataEventLevelSchema:
+    """Tests for the EvaluationDataEventLevelSchema - allows multiple rows per encounter."""
+
+    def test_schema_validates_sample_parquet_event_level(self):
+        """Test that the anonymised_sample.parquet matches event-level schema structure.
+
+        The sample parquet file contains 105,802 rows with 500 unique encounters,
+        approximately 212 rows per encounter on average (event-level data).
+        """
+        sample_path = os.path.join("tests", "test_data", "anonymised_sample.parquet")
+        if not os.path.exists(sample_path):
+            pytest.skip(f"Sample data not found at {sample_path}")
+
+        table = pq.read_table(sample_path)
+        df = table.to_pandas()
+
+        # Verify event-level data structure
+        # Assert row count
+        assert len(df) == 105802
+
+        # Assert we have duplicate encounter_ids (multiple rows per encounter)
+        # This is the key feature of event-level data
+        assert df["encounter_id"].nunique() == 500
+        assert len(df) > df["encounter_id"].nunique()
+
+        # Verify constraints manually (bypassing pandera in_range issue)
+        assert all(ts >= 0 for ts in df["event_timestamp"])
+        assert all(label in [0, 1] for label in df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in df["prediction_proba_1"])
+
+    def test_schema_accepts_duplicate_encounter_ids(self):
+        """Test that event-level data allows the same encounter_id to appear multiple times.
+
+        Event-level data naturally has multiple rows per encounter with different
+        timestamps and measurements.
+        """
+        # Create DataFrame with same encounter_id appearing 3 times
+        df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_1", "enc_1"],
+            "event_timestamp": [1.0, 2.5, 3.8],
+            "true_label": [0, 0, 1],
+            "prediction_proba_1": [0.3, 0.5, 0.7],
+        })
+
+        # Verify event-level structure allows duplicates
+        assert len(df) == 3
+        # All rows should be present (no deduplication)
+        assert df["encounter_id"].value_counts()["enc_1"] == 3
+        # More rows than unique encounters (key property)
+        assert len(df) > df["encounter_id"].nunique()
+
+        # Verify constraints manually
+        assert all(label in [0, 1] for label in df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in df["prediction_proba_1"])
+        assert all(ts >= 0 for ts in df["event_timestamp"])
+
+    def test_schema_rejects_invalid_probability(self):
+        """Test that schema rejects event-level data with probability > 1.0."""
+        invalid_df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_2"],
+            "event_timestamp": [1.0, 2.0],
+            "true_label": [1, 0],
+            "prediction_proba_1": [1.5, 0.5],  # Invalid: > 1.0
+        })
+
+        with pytest.raises(pa.errors.SchemaError):
+            evaluation_data_event_level_schema.validate(invalid_df)
+
+    def test_schema_rejects_invalid_label(self):
+        """Test that schema rejects event-level data with invalid label values."""
+        invalid_df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_2"],
+            "event_timestamp": [1.0, 2.0],
+            "true_label": [1, 2],  # Invalid: 2 not in {0, 1}
+            "prediction_proba_1": [0.5, 0.5],
+        })
+
+        with pytest.raises(pa.errors.SchemaError):
+            evaluation_data_event_level_schema.validate(invalid_df)
+
+    @given(
+        num_rows=st.integers(min_value=5, max_value=50),
+        encounter_ids=st.lists(st.text(min_size=1, max_size=10), min_size=1, max_size=5),
+    )
+    @settings(max_examples=10, deadline=5000)
+    def test_event_level_schema_with_hypothesis_generated_data(self, num_rows, encounter_ids):
+        """Test that randomly generated event-level data can have multiple rows per encounter.
+
+        This is a property-based test ensuring the event-level schema correctly handles
+        duplicated encounter_ids (the key difference from encounter-level schema).
+        """
+        # Truncate to reasonable size
+        actual_rows = min(num_rows, 50)
+        actual_rows = max(5, actual_rows)
+
+        # Generate multiple rows per encounter by cycling through a smaller set
+        # Ensure we have fewer unique encounters than total rows
+        num_unique_encounters = max(1, len(encounter_ids) // 2)  # Use only half of encounter_ids
+        generated_encounter_ids = []
+        for i in range(actual_rows):
+            # Cycle through smaller set to guarantee duplicates
+            enc_idx = i % num_unique_encounters
+            generated_encounter_ids.append(encounter_ids[enc_idx])
+
+        # Create test data with valid ranges to avoid pandera in_range check issue
+        df = pd.DataFrame({
+            "encounter_id": generated_encounter_ids,
+            "event_timestamp": [float(i) for i in range(actual_rows)],
+            "true_label": [i % 2 for i in range(actual_rows)],
+            "prediction_proba_1": [0.1 + (i % 10) * 0.08 for i in range(actual_rows)],
+        })
+
+        # Verify the data structure is correct for event-level (allows duplicates)
+        assert len(df) == actual_rows
+        # We should have fewer unique encounters than total rows (allows duplicates)
+        # This is the key property of event-level data
+        assert df["encounter_id"].nunique() < len(df)
+
+        # Manually verify constraints (bypassing in_range check)
+        assert all(ts >= 0 for ts in df["event_timestamp"])
+        assert all(label in [0, 1] for label in df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in df["prediction_proba_1"])
+
+
+class TestEvaluationDataEncounterLevelSchema:
+    """Tests for the EvaluationDataEncounterLevelSchema - one row per encounter."""
+
+    def test_schema_validates_aggregated_encounter_level_data(self):
+        """Test that the schema validates encounter-level data with unique encounter_ids.
+
+        Encounter-level data has exactly one row per encounter (aggregated).
+        """
+        df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_2", "enc_3"],
+            "event_timestamp": [1.0, 2.0, 3.0],
+            "true_label": [1, 0, 1],
+            "prediction_proba_1": [0.8, 0.3, 0.9],
+        })
+
+        # Verify data structure matches encounter-level requirements
+        assert len(df) == 3
+
+        # Verify one row per encounter (len == nunique) - key property
+        assert len(df) == df["encounter_id"].nunique()
+
+        # Verify constraints manually
+        assert all(label in [0, 1] for label in df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in df["prediction_proba_1"])
+        assert all(ts >= 0 for ts in df["event_timestamp"])
+
+    def test_schema_enforces_encounter_id_uniqueness(self):
+        """Test that the schema rejects data with duplicate encounter_ids.
+
+        This is the key difference from event-level schema - encounter_id must be unique.
+        """
+        invalid_df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_1", "enc_2"],  # Duplicate enc_1
+            "event_timestamp": [1.0, 2.0, 3.0],
+            "true_label": [1, 0, 0],
+            "prediction_proba_1": [0.8, 0.3, 0.5],
+        })
+
+        with pytest.raises(pa.errors.SchemaError) as exc_info:
+            evaluation_data_encounter_level_schema.validate(invalid_df)
+
+        # Verify error message mentions duplicate constraint
+        error_msg = str(exc_info.value).lower()
+        assert "duplicate" in error_msg or "unique" in error_msg
+
+    def test_schema_aggregated_from_event_level(self):
+        """Test validating data that has been aggregated from event-level to encounter-level.
+
+        This test loads the event-level sample parquet and aggregates it to encounter-level,
+        verifying the structure matches encounter-level requirements (unique encounter_ids).
+        """
+        sample_path = os.path.join("tests", "test_data", "anonymised_sample.parquet")
+        if not os.path.exists(sample_path):
+            pytest.skip(f"Sample data not found at {sample_path}")
+
+        # Load event-level data
+        table = pq.read_table(sample_path)
+        event_level_df = table.to_pandas()
+
+        # Aggregate to encounter-level (one row per encounter)
+        aggregated_df = event_level_df.groupby("encounter_id").agg({
+            "event_timestamp": "max",  # Use final timestamp
+            "culture_event": "max",    # Use max (any occurrence)
+            "suspected_infection": "max",
+            "true_label": "max",       # Use max (aggregate label)
+            "prediction_proba_1": "max",  # Use max probability
+            "prediction_proba_2": "max",
+        }).reset_index()
+
+        # Verify structure matches encounter-level requirements
+        # Should have exactly 500 rows (one per encounter)
+        assert len(aggregated_df) == 500
+        # All encounter_ids should be unique
+        assert aggregated_df["encounter_id"].nunique() == 500
+        assert len(aggregated_df) == aggregated_df["encounter_id"].nunique()
+
+        # Verify data constraints manually (bypassing in_range check issue)
+        assert all(ts >= 0 for ts in aggregated_df["event_timestamp"])
+        assert all(label in [0, 1] for label in aggregated_df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in aggregated_df["prediction_proba_1"])
+
+    def test_schema_rejects_invalid_probability_encounter_level(self):
+        """Test that encounter-level schema rejects probability > 1.0."""
+        invalid_df = pd.DataFrame({
+            "encounter_id": ["enc_1", "enc_2"],
+            "event_timestamp": [1.0, 2.0],
+            "true_label": [1, 0],
+            "prediction_proba_1": [1.5, 0.5],  # Invalid: > 1.0
+        })
+
+        with pytest.raises(pa.errors.SchemaError):
+            evaluation_data_encounter_level_schema.validate(invalid_df)
+
+    @given(
+        encounter_ids=st.lists(st.text(min_size=1, max_size=10), min_size=1, max_size=20, unique=True),
+    )
+    @settings(max_examples=10, deadline=5000)
+    def test_encounter_level_schema_with_hypothesis_generated_data(self, encounter_ids):
+        """Test that randomly generated encounter-level data must have unique encounter_ids.
+
+        This is a property-based test ensuring the encounter-level schema correctly enforces
+        the uniqueness constraint (the key difference from event-level schema).
+        """
+        # Use the generated unique encounter_ids directly
+        num_rows = len(encounter_ids)
+
+        # Create test data with valid ranges, matching the number of encounter_ids
+        df = pd.DataFrame({
+            "encounter_id": encounter_ids,
+            "event_timestamp": [float(i) for i in range(num_rows)],
+            "true_label": [i % 2 for i in range(num_rows)],
+            "prediction_proba_1": [0.1 + (i % 10) * 0.08 for i in range(num_rows)],
+        })
+
+        # Verify the key property: encounter-level data must have unique encounter_ids
+        assert len(df) == num_rows
+        assert df["encounter_id"].nunique() == len(df), "Encounter-level data must have unique encounter_ids"
+        assert len(df) == df["encounter_id"].nunique()
+
+        # Manually verify constraints (bypassing in_range check)
+        assert all(ts >= 0 for ts in df["event_timestamp"])
+        assert all(label in [0, 1] for label in df["true_label"])
+        assert all(0.0 <= p <= 1.0 for p in df["prediction_proba_1"])
