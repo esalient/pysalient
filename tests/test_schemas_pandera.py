@@ -521,7 +521,7 @@ class TestIOCSVInputSchema:
             csv_df = pd.DataFrame({
                 "encounter_id": encounter_ids[:actual_rows],
                 "timestamp": [str(t) for t in timestamps[:actual_rows]],
-                "label": [str(l) for l in labels[:actual_rows]],
+                "label": [str(label) for label in labels[:actual_rows]],
                 "probability": [str(p) for p in probabilities[:actual_rows]],
             })
 
