@@ -41,9 +41,15 @@ def timeseries_data():
     # Integer timeseries
     timeseries_int = np.array([1, 2, 3, 4])
     # Temporal timeseries
-    timeseries_temporal = np.array(['2023-01-01T00:00:00', '2023-01-01T01:00:00',
-                                   '2023-01-01T02:00:00', '2023-01-01T03:00:00'],
-                                  dtype='datetime64[ns]')
+    timeseries_temporal = np.array(
+        [
+            "2023-01-01T00:00:00",
+            "2023-01-01T01:00:00",
+            "2023-01-01T02:00:00",
+            "2023-01-01T03:00:00",
+        ],
+        dtype="datetime64[ns]",
+    )
     return probas, labels, timeseries_int, timeseries_temporal
 
 
@@ -61,7 +67,7 @@ class TestProcessSingleEvaluationBasic:
             threshold_list=[0.5],
             timeseries_array=None,
             timeseries_pa_type=None,
-            time_unit=None
+            time_unit=None,
         )
 
         assert len(results) == 1
@@ -102,7 +108,7 @@ class TestProcessSingleEvaluationBasic:
             threshold_list=[0.0, 0.5, 1.0],
             timeseries_array=None,
             timeseries_pa_type=None,
-            time_unit=None
+            time_unit=None,
         )
 
         assert len(results) == 3
@@ -135,7 +141,7 @@ class TestProcessSingleEvaluationBasic:
                 threshold_list=[0.5],
                 timeseries_array=None,
                 timeseries_pa_type=None,
-                time_unit=None
+                time_unit=None,
             )
 
         assert len(results) == 0
@@ -155,7 +161,7 @@ class TestProcessSingleEvaluationBasic:
                 threshold_list=[0.5],
                 timeseries_array=None,
                 timeseries_pa_type=None,
-                time_unit=None
+                time_unit=None,
             )
 
         assert len(results) == 1
@@ -178,7 +184,7 @@ class TestProcessSingleEvaluationBasic:
                 threshold_list=[0.5],
                 timeseries_array=None,
                 timeseries_pa_type=None,
-                time_unit=None
+                time_unit=None,
             )
 
         assert len(results) == 1
@@ -202,7 +208,7 @@ class TestProcessSingleEvaluationTimeToFirstAlert:
             threshold_list=[0.5],
             timeseries_array=timeseries_int,
             timeseries_pa_type=pa.int64(),
-            time_unit="minutes"
+            time_unit="minutes",
         )
 
         assert len(results) == 1
@@ -223,8 +229,8 @@ class TestProcessSingleEvaluationTimeToFirstAlert:
             filter_desc="test_filter",
             threshold_list=[0.5],
             timeseries_array=timeseries_temporal,
-            timeseries_pa_type=pa.timestamp('ns'),
-            time_unit=None  # Not required for temporal
+            timeseries_pa_type=pa.timestamp("ns"),
+            time_unit=None,  # Not required for temporal
         )
 
         assert len(results) == 1
@@ -248,7 +254,7 @@ class TestProcessSingleEvaluationTimeToFirstAlert:
             threshold_list=[0.5],  # No probas >= 0.5
             timeseries_array=timeseries_int,
             timeseries_pa_type=pa.int64(),
-            time_unit="minutes"
+            time_unit="minutes",
         )
 
         assert len(results) == 1
@@ -272,7 +278,7 @@ class TestProcessSingleEvaluationTimeToFirstAlert:
                 threshold_list=[0.5],
                 timeseries_array=timeseries_int,
                 timeseries_pa_type=pa.int64(),
-                time_unit=None  # Missing required time_unit
+                time_unit=None,  # Missing required time_unit
             )
 
     def test_time_to_first_alert_unsupported_type(self):
@@ -290,7 +296,7 @@ class TestProcessSingleEvaluationTimeToFirstAlert:
                 threshold_list=[0.5],
                 timeseries_array=timeseries_str,
                 timeseries_pa_type=pa.string(),
-                time_unit=None
+                time_unit=None,
             )
 
 
@@ -302,7 +308,9 @@ class TestProcessSingleEvaluationConfidenceIntervals:
         """Test overall AU CI calculation."""
         probas, labels = larger_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.calculate_bootstrap_ci') as mock_bootstrap:
+        with patch(
+            "pysalient.evaluation._evaluation_process.calculate_bootstrap_ci"
+        ) as mock_bootstrap:
             if calculate_au_ci:
                 mock_bootstrap.return_value = (0.7, 0.9)  # Mock CI values
 
@@ -317,7 +325,7 @@ class TestProcessSingleEvaluationConfidenceIntervals:
                 time_unit=None,
                 calculate_au_ci=calculate_au_ci,
                 bootstrap_rounds=100,
-                bootstrap_seed=42
+                bootstrap_seed=42,
             )
 
             assert len(results) == 1
@@ -341,7 +349,9 @@ class TestProcessSingleEvaluationConfidenceIntervals:
         """Test threshold CI calculation with bootstrap method."""
         probas, labels = larger_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.calculate_bootstrap_ci') as mock_bootstrap:
+        with patch(
+            "pysalient.evaluation._evaluation_process.calculate_bootstrap_ci"
+        ) as mock_bootstrap:
             if calculate_threshold_ci:
                 mock_bootstrap.return_value = (0.6, 0.8)  # Mock CI values
 
@@ -357,7 +367,7 @@ class TestProcessSingleEvaluationConfidenceIntervals:
                 calculate_threshold_ci=calculate_threshold_ci,
                 threshold_ci_method="bootstrap",
                 bootstrap_rounds=100,
-                bootstrap_seed=42
+                bootstrap_seed=42,
             )
 
             assert len(results) == 1
@@ -380,7 +390,7 @@ class TestProcessSingleEvaluationConfidenceIntervals:
         """Test threshold CI calculation with analytical methods."""
         probas, labels = larger_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.anaci') as mock_anaci:
+        with patch("pysalient.evaluation._evaluation_process.anaci") as mock_anaci:
             mock_ci_func = Mock(return_value=(0.5, 0.9))
             if analytical_method == "normal":
                 mock_anaci.calculate_normal_approx_ci = mock_ci_func
@@ -400,7 +410,7 @@ class TestProcessSingleEvaluationConfidenceIntervals:
                 time_unit=None,
                 calculate_threshold_ci=True,
                 threshold_ci_method=analytical_method,
-                ci_alpha=0.05
+                ci_alpha=0.05,
             )
 
             assert len(results) == 1
@@ -433,7 +443,7 @@ class TestProcessSingleEvaluationRounding:
             timeseries_array=None,
             timeseries_pa_type=None,
             time_unit=None,
-            decimal_places=2
+            decimal_places=2,
         )
 
         assert len(results) == 1
@@ -449,7 +459,9 @@ class TestProcessSingleEvaluationRounding:
         """Test that rounding is applied to confidence intervals."""
         probas, labels = larger_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.calculate_bootstrap_ci') as mock_bootstrap:
+        with patch(
+            "pysalient.evaluation._evaluation_process.calculate_bootstrap_ci"
+        ) as mock_bootstrap:
             mock_bootstrap.return_value = (0.123456, 0.987654)  # Unrounded CI values
 
             results = _process_single_evaluation(
@@ -463,7 +475,7 @@ class TestProcessSingleEvaluationRounding:
                 time_unit=None,
                 calculate_au_ci=True,
                 bootstrap_rounds=100,
-                decimal_places=3
+                decimal_places=3,
             )
 
             assert len(results) == 1
@@ -481,8 +493,8 @@ class TestProcessSingleEvaluationErrorHandling:
         """Test warning when sklearn is not available."""
         probas, labels = basic_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.SKLEARN_AVAILABLE', False):
-            with patch('pysalient.evaluation._evaluation_process.roc_auc_score', None):
+        with patch("pysalient.evaluation._evaluation_process.SKLEARN_AVAILABLE", False):
+            with patch("pysalient.evaluation._evaluation_process.roc_auc_score", None):
                 with warnings.catch_warnings():
                     warnings.simplefilter("always")
 
@@ -494,7 +506,7 @@ class TestProcessSingleEvaluationErrorHandling:
                         threshold_list=[0.5],
                         timeseries_array=None,
                         timeseries_pa_type=None,
-                        time_unit=None
+                        time_unit=None,
                     )
 
                     # Should still return results with NaN metrics
@@ -507,7 +519,9 @@ class TestProcessSingleEvaluationErrorHandling:
         """Test warning when bootstrap CI calculation fails."""
         probas, labels = larger_test_data
 
-        with patch('pysalient.evaluation._evaluation_process.calculate_bootstrap_ci') as mock_bootstrap:
+        with patch(
+            "pysalient.evaluation._evaluation_process.calculate_bootstrap_ci"
+        ) as mock_bootstrap:
             mock_bootstrap.side_effect = RuntimeError("Bootstrap failed")
 
             with warnings.catch_warnings(record=True) as w:
@@ -523,7 +537,7 @@ class TestProcessSingleEvaluationErrorHandling:
                     timeseries_pa_type=None,
                     time_unit=None,
                     calculate_au_ci=True,
-                    bootstrap_rounds=100
+                    bootstrap_rounds=100,
                 )
 
                 # Should return results with None CIs
@@ -533,14 +547,18 @@ class TestProcessSingleEvaluationErrorHandling:
                 assert result["AUROC_Upper_CI"] is None
 
                 # Should have issued warning
-                assert any("confidence interval calculation failed" in str(warning.message)
-                          for warning in w)
+                assert any(
+                    "confidence interval calculation failed" in str(warning.message)
+                    for warning in w
+                )
 
     def test_temporal_nat_handling(self):
         """Test handling of NaT values in temporal timeseries."""
         probas = np.array([0.2, 0.7])
         labels = np.array([0, 1])
-        timeseries_temporal = np.array(['2023-01-01T00:00:00', 'NaT'], dtype='datetime64[ns]')
+        timeseries_temporal = np.array(
+            ["2023-01-01T00:00:00", "NaT"], dtype="datetime64[ns]"
+        )
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
@@ -552,8 +570,8 @@ class TestProcessSingleEvaluationErrorHandling:
                 filter_desc="test_filter",
                 threshold_list=[0.5],
                 timeseries_array=timeseries_temporal,
-                timeseries_pa_type=pa.timestamp('ns'),
-                time_unit=None
+                timeseries_pa_type=pa.timestamp("ns"),
+                time_unit=None,
             )
 
             assert len(results) == 1

@@ -105,15 +105,21 @@ def format_evaluation_table(
                 if order_by in df.columns:
                     df = df.sort_values(by=order_by).reset_index(drop=True)
                 else:
-                    raise ValueError(f"Column '{order_by}' not found in table. Available columns: {df.columns.tolist()}")
+                    raise ValueError(
+                        f"Column '{order_by}' not found in table. Available columns: {df.columns.tolist()}"
+                    )
             elif isinstance(order_by, list):
                 # Multiple columns
                 missing_cols = [col for col in order_by if col not in df.columns]
                 if missing_cols:
-                    raise ValueError(f"Columns {missing_cols} not found in table. Available columns: {df.columns.tolist()}")
+                    raise ValueError(
+                        f"Columns {missing_cols} not found in table. Available columns: {df.columns.tolist()}"
+                    )
                 df = df.sort_values(by=order_by).reset_index(drop=True)
             else:
-                raise TypeError("'order_by' must be a string, list of strings, or None.")
+                raise TypeError(
+                    "'order_by' must be a string, list of strings, or None."
+                )
         except Exception as e:
             raise RuntimeError(f"Failed to sort DataFrame by '{order_by}': {e}") from e
 
@@ -229,8 +235,9 @@ def format_evaluation_table(
 
         # Dynamically add time-to-event columns (they have specific naming pattern)
         for col in df.columns:
-            if ("_from_first_alert_to_" in col and
-                not col.startswith("count_")):  # Exclude count columns (integers)
+            if "_from_first_alert_to_" in col and not col.startswith(
+                "count_"
+            ):  # Exclude count columns (integers)
                 cols_to_format_set.add(col)
 
         # Add original metrics found, ONLY if ci_column is True (otherwise they are strings)

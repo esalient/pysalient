@@ -60,9 +60,7 @@ def test_returns_styler(sample_eval_table):
 
 def test_default_formatting(sample_eval_table):
     """Test default formatting (3 decimal places) is applied to default columns."""
-    styler = viz.format_evaluation_table(
-        sample_eval_table
-    )  # Default decimal_places=3
+    styler = viz.format_evaluation_table(sample_eval_table)  # Default decimal_places=3
     html_output = styler.to_html()
 
     # Check default float columns are formatted to 3 decimal places

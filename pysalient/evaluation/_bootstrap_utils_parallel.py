@@ -146,7 +146,7 @@ def calculate_bootstrap_ci_parallel(
         y_true=y_true,
         y_pred=y_pred,
         metric_func=metric_func,
-        seed=seed
+        seed=seed,
     )
 
     # Execute parallel bootstrap
@@ -252,10 +252,14 @@ def calculate_bootstrap_ci_batch_parallel(
     for name, func in metric_funcs.items():
         try:
             results[name] = calculate_bootstrap_ci_parallel(
-                y_true, y_pred, func, n_rounds, alpha,
+                y_true,
+                y_pred,
+                func,
+                n_rounds,
+                alpha,
                 seed=(seed + hash(name)) if seed else None,  # Unique seed per metric
                 verbosity=verbosity,
-                n_jobs=workers_per_metric
+                n_jobs=workers_per_metric,
             )
         except Exception as e:
             if verbosity <= 0:

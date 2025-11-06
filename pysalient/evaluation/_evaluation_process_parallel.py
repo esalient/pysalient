@@ -33,12 +33,14 @@ try:
         calculate_bootstrap_ci_batch_parallel,
         calculate_bootstrap_ci_parallel,
     )
+
     PARALLEL_BOOTSTRAP_AVAILABLE = True
 except ImportError:
     PARALLEL_BOOTSTRAP_AVAILABLE = False
     # Fall back to original if parallel version not available
     try:
         from ._bootstrap_utils import calculate_bootstrap_ci
+
         calculate_bootstrap_ci_parallel = calculate_bootstrap_ci
         PARALLEL_BOOTSTRAP_AVAILABLE = False
     except ImportError:
@@ -101,17 +103,17 @@ def _process_threshold_metrics(
         f1 = np.nan
 
     result = {
-        'threshold': threshold,
-        'TP': tp,
-        'TN': tn,
-        'FP': fp,
-        'FN': fn,
-        'PPV': ppv,
-        'Sensitivity': sensitivity,
-        'Specificity': specificity,
-        'NPV': npv,
-        'Accuracy': accuracy,
-        'F1_Score': f1,
+        "threshold": threshold,
+        "TP": tp,
+        "TN": tn,
+        "FP": fp,
+        "FN": fn,
+        "PPV": ppv,
+        "Sensitivity": sensitivity,
+        "Specificity": specificity,
+        "NPV": npv,
+        "Accuracy": accuracy,
+        "F1_Score": f1,
     }
 
     # Calculate CIs if requested
@@ -119,31 +121,35 @@ def _process_threshold_metrics(
         if PARALLEL_BOOTSTRAP_AVAILABLE and calculate_bootstrap_ci_batch_parallel:
             # Define metric functions for this threshold
             metric_funcs = {
-                'PPV': lambda yt, yp: (
-                    np.sum((yp >= threshold) & (yt == 1)) /
-                    np.sum(yp >= threshold) if np.sum(yp >= threshold) > 0 else np.nan
+                "PPV": lambda yt, yp: (
+                    np.sum((yp >= threshold) & (yt == 1)) / np.sum(yp >= threshold)
+                    if np.sum(yp >= threshold) > 0
+                    else np.nan
                 ),
-                'Sensitivity': lambda yt, yp: (
-                    np.sum((yp >= threshold) & (yt == 1)) /
-                    np.sum(yt == 1) if np.sum(yt == 1) > 0 else np.nan
+                "Sensitivity": lambda yt, yp: (
+                    np.sum((yp >= threshold) & (yt == 1)) / np.sum(yt == 1)
+                    if np.sum(yt == 1) > 0
+                    else np.nan
                 ),
-                'Specificity': lambda yt, yp: (
-                    np.sum((yp < threshold) & (yt == 0)) /
-                    np.sum(yt == 0) if np.sum(yt == 0) > 0 else np.nan
+                "Specificity": lambda yt, yp: (
+                    np.sum((yp < threshold) & (yt == 0)) / np.sum(yt == 0)
+                    if np.sum(yt == 0) > 0
+                    else np.nan
                 ),
-                'NPV': lambda yt, yp: (
-                    np.sum((yp < threshold) & (yt == 0)) /
-                    np.sum(yp < threshold) if np.sum(yp < threshold) > 0 else np.nan
+                "NPV": lambda yt, yp: (
+                    np.sum((yp < threshold) & (yt == 0)) / np.sum(yp < threshold)
+                    if np.sum(yp < threshold) > 0
+                    else np.nan
                 ),
             }
 
             if accuracy_score is not None:
-                metric_funcs['Accuracy'] = lambda yt, yp: accuracy_score(
+                metric_funcs["Accuracy"] = lambda yt, yp: accuracy_score(
                     yt, (yp >= threshold).astype(np.int8)
                 )
 
             if f1_score is not None:
-                metric_funcs['F1_Score'] = lambda yt, yp: f1_score(
+                metric_funcs["F1_Score"] = lambda yt, yp: f1_score(
                     yt, (yp >= threshold).astype(np.int8), zero_division=0.0
                 )
 
@@ -156,24 +162,24 @@ def _process_threshold_metrics(
                 alpha=ci_alpha,
                 seed=bootstrap_seed,
                 verbosity=verbosity,
-                n_jobs=n_jobs
+                n_jobs=n_jobs,
             )
 
             # Unpack results
             for metric_name, (lower, upper) in ci_results.items():
-                result[f'{metric_name}_Lower_CI'] = lower
-                result[f'{metric_name}_Upper_CI'] = upper
+                result[f"{metric_name}_Lower_CI"] = lower
+                result[f"{metric_name}_Upper_CI"] = upper
         else:
             # Fall back to sequential calculation if parallel not available
             # (Implementation would go here - omitted for brevity)
             pass
 
     # Set None for CIs if not calculated
-    ci_metrics = ['PPV', 'Sensitivity', 'Specificity', 'NPV', 'Accuracy', 'F1_Score']
+    ci_metrics = ["PPV", "Sensitivity", "Specificity", "NPV", "Accuracy", "F1_Score"]
     for metric in ci_metrics:
-        if f'{metric}_Lower_CI' not in result:
-            result[f'{metric}_Lower_CI'] = None
-            result[f'{metric}_Upper_CI'] = None
+        if f"{metric}_Lower_CI" not in result:
+            result[f"{metric}_Lower_CI"] = None
+            result[f"{metric}_Upper_CI"] = None
 
     return result
 
@@ -210,9 +216,16 @@ def process_thresholds_parallel(
         results = []
         for threshold in threshold_list:
             result = _process_threshold_metrics(
-                threshold, probas, labels, calculate_threshold_ci,
-                threshold_ci_method, ci_alpha, bootstrap_rounds,
-                bootstrap_seed, verbosity, n_jobs
+                threshold,
+                probas,
+                labels,
+                calculate_threshold_ci,
+                threshold_ci_method,
+                ci_alpha,
+                bootstrap_rounds,
+                bootstrap_seed,
+                verbosity,
+                n_jobs,
             )
             results.append(result)
         return results
@@ -229,6 +242,7 @@ def process_thresholds_parallel(
 
     if verbosity <= -1:
         import logging
+
         logger = logging.getLogger(__name__)
         logger.info(
             f"Processing {len(threshold_list)} thresholds with "
@@ -247,7 +261,7 @@ def process_thresholds_parallel(
         bootstrap_rounds=bootstrap_rounds,
         bootstrap_seed=bootstrap_seed,
         verbosity=verbosity,
-        n_jobs=n_bootstrap_workers
+        n_jobs=n_bootstrap_workers,
     )
 
     # Process thresholds in parallel
@@ -274,18 +288,22 @@ def enable_parallel_evaluation():
 
     if PARALLEL_BOOTSTRAP_AVAILABLE:
         # Replace the bootstrap function in the main modules
-        if 'pysalient.evaluation._bootstrap_utils' in sys.modules:
-            sys.modules['pysalient.evaluation._bootstrap_utils'].calculate_bootstrap_ci = (
-                calculate_bootstrap_ci_parallel
-            )
+        if "pysalient.evaluation._bootstrap_utils" in sys.modules:
+            sys.modules[
+                "pysalient.evaluation._bootstrap_utils"
+            ].calculate_bootstrap_ci = calculate_bootstrap_ci_parallel
 
-        print("✅ Parallel evaluation enabled. Bootstrap calculations will use multiple CPU cores.")
+        print(
+            "✅ Parallel evaluation enabled. Bootstrap calculations will use multiple CPU cores."
+        )
         print(f"   Available CPUs: {cpu_count()}")
         if PARALLEL_BOOTSTRAP_AVAILABLE:
             print("   Parallel bootstrap: ENABLED")
         else:
             print("   Parallel bootstrap: DISABLED (using sequential fallback)")
     else:
-        print("⚠️  Parallel bootstrap module not available. Using sequential processing.")
+        print(
+            "⚠️  Parallel bootstrap module not available. Using sequential processing."
+        )
 
     return PARALLEL_BOOTSTRAP_AVAILABLE

@@ -4,36 +4,55 @@ Installation
 
 pySALIENT requires Python 3.11 or later.
 
-The recommended way to install pySALIENT for general use is directly from the source repository.
+The recommended way to install pySALIENT is using `pixi <https://pixi.sh>`_, which manages both conda and PyPI dependencies seamlessly.
 
-1.  **Clone the repository:**
+1.  **Install pixi:**
+    If you don't have pixi installed yet:
+
+    .. code-block:: bash
+
+        # Linux & macOS
+        curl -fsSL https://pixi.sh/install.sh | bash
+
+        # Windows (PowerShell)
+        iwr -useb https://pixi.sh/install.ps1 | iex
+
+2.  **Clone the repository:**
     Open your terminal and run the following command:
 
     .. code-block:: bash
 
-        git clone https://github.com/esalient/pysalient # Replace with the correct URL if different
+        git clone https://github.com/esalient/pysalient
         cd pysalient
 
-2.  **Install the package:**
-    You can use either `uv` or `pip` to install the package. Navigate into the cloned directory (`pysalient`) if you haven't already.
+3.  **Install with pixi:**
+    Simply run:
 
-    *   **Using `uv`:**
-        If you have `uv` installed, you can create a virtual environment and install the package in one step:
+    .. code-block:: bash
 
-        .. code-block:: bash
+        pixi install
 
-            uv venv --python 3.11  # Creates .venv and ensures Python 3.11
-            uv pip install .       # Installs pySALIENT into the environment
+    This will create an isolated environment with all dependencies installed.
 
-        Activate the environment:
-        *   Linux/macOS: ``source .venv/bin/activate``
-        *   Windows: ``.\.venv\Scripts\activate``
+4.  **Using pySALIENT:**
 
-    *   **Using `pip`:**
-        If you prefer using `pip`, first create and activate a virtual environment using your preferred method (e.g., `venv`):
+    You can either activate the pixi environment or run commands directly:
 
-        .. code-block:: bash
+    .. code-block:: bash
 
-            python3 -m venv .venv   # Or python -m venv .venv
-            # Activate the environment (see commands above)
-            pip install .           # Installs pySALIENT
+        # Activate the environment (optional)
+        pixi shell
+
+        # Or run Python directly without activation
+        pixi run python your_script.py
+
+Alternative: Using pip
+----------------------
+
+If you prefer using ``pip``, you can still install pySALIENT in a traditional virtual environment:
+
+.. code-block:: bash
+
+    python3 -m venv .venv
+    source .venv/bin/activate  # On Windows: .\.venv\Scripts\activate
+    pip install .
