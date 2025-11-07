@@ -30,7 +30,7 @@ jobs:
       run: pixi run lint
 
     - name: Test with pytest and generate coverage
-      run: pixi run test --cov-report=xml
+      run: pixi run test
 
   update-version:
     # Run this job only when a tag starting with 'v' is pushed

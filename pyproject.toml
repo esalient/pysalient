@@ -136,6 +136,8 @@ lint = "ruff check . --fix"
 format = "ruff format ."
 typecheck = "mypy pysalient"
 docs = "sphinx-build -b html docs/source docs/build"
+build-wheel = "python -m pip install build && python -m build"
+build-conda = "pixi global install pixi-build && pixi build"
 
 ########################
 ## TOOL CONFIGURATION ##

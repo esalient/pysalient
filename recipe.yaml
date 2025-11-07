@@ -1,0 +1,56 @@
+# Conda recipe for pysalient using pixi build
+# See: https://pixi.sh/latest/build/getting_started/
+
+schema_version: 1
+
+context:
+  name: pysalient
+  version: "0.0.1"
+
+package:
+  name: ${{ name }}
+  version: ${{ version }}
+
+source:
+  path: .
+
+build:
+  number: 0
+  script:
+    - python -m pip install . -vv --no-deps --no-build-isolation
+
+requirements:
+  host:
+    - python >=3.11
+    - pip
+    - hatchling
+  run:
+    - python >=3.11
+    - pydantic
+    - pyarrow
+    - numpy
+    - pandas
+    - scikit-learn
+
+test:
+  imports:
+    - pysalient
+  commands:
+    - pip check
+  requires:
+    - pip
+
+about:
+  homepage: https://github.com/esalient/pysalient
+  repository: https://github.com/esalient/pysalient
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: "pySALIENT: Python implementation of the SALIENT framework to assist with clinical AI research and implementation"
+  description: |
+    pySALIENT: Python implementation of the SALIENT framework to assist with
+    clinical AI research and implementation
+  documentation: https://github.com/esalient/pysalient
+
+extra:
+  recipe-maintainers:
+    - pySALIENT Contributors

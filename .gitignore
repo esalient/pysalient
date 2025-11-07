@@ -167,6 +167,9 @@ cython_debug/
 # pixi
 .pixi/
 
+# pixi build output (conda packages)
+output/
+
 # data folder
 data/*
 !data/.gitkeep
