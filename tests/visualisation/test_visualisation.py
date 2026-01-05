@@ -276,3 +276,176 @@ def test_plot_pr_curve_with_existing_ax(sample_plot_data):
     assert ax_returned is ax_existing
     assert len(ax_existing.lines) > 0
     plt.close(fig)
+
+
+# --- Tests for Altair Plotting Functions ---
+
+
+# Fixture to skip tests if Altair is not available
+needs_altair = pytest.mark.skipif(
+    not viz._ALTAIR_AVAILABLE, reason="altair not installed"
+)
+
+
+# Metadata keys for test fixtures
+_META_KEY_Y_PROBA = "pysalient.io.y_proba_col"
+_META_KEY_Y_LABEL = "pysalient.io.y_label_col"
+
+
+@pytest.fixture
+def sample_eval_table_with_curves() -> pa.Table:
+    """Provides a sample evaluation result table with ROC/PR curve data."""
+    # Import evaluation to create proper table with curve data
+    from pysalient.evaluation import evaluation
+
+    probas = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]
+    labels = [0, 0, 0, 1, 0, 1, 1, 1]
+
+    table = pa.table({"y_proba": probas, "y_label": labels})
+    metadata = {
+        _META_KEY_Y_PROBA.encode("utf-8"): b"y_proba",
+        _META_KEY_Y_LABEL.encode("utf-8"): b"y_label",
+    }
+    table = table.replace_schema_metadata(metadata)
+
+    # Run evaluation with curve export
+    result = evaluation(
+        table,
+        "test_model",
+        "test_filter",
+        [0.5],
+        export_roc_curve_data=True,
+    )
+    return result
+
+
+@pytest.fixture
+def sample_eval_table_without_curves() -> pa.Table:
+    """Provides a sample evaluation result table WITHOUT curve data."""
+    from pysalient.evaluation import evaluation
+
+    probas = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]
+    labels = [0, 0, 0, 1, 0, 1, 1, 1]
+
+    table = pa.table({"y_proba": probas, "y_label": labels})
+    metadata = {
+        _META_KEY_Y_PROBA.encode("utf-8"): b"y_proba",
+        _META_KEY_Y_LABEL.encode("utf-8"): b"y_label",
+    }
+    table = table.replace_schema_metadata(metadata)
+
+    # Run evaluation WITHOUT curve export
+    result = evaluation(
+        table,
+        "test_model",
+        "test_filter",
+        [0.5],
+        export_roc_curve_data=False,
+    )
+    return result
+
+
+@needs_altair
+def test_plot_roc_curve_altair_runs(sample_eval_table_with_curves):
+    """Test that plot_roc_curve_altair runs without error."""
+    chart = viz.plot_roc_curve_altair(sample_eval_table_with_curves)
+    # Check it returns something (Altair Chart object)
+    assert chart is not None
+    # Check it has expected properties
+    assert hasattr(chart, "to_dict")  # Altair charts have to_dict method
+
+
+@needs_altair
+def test_plot_roc_curve_altair_with_threshold(sample_eval_table_with_curves):
+    """Test plot_roc_curve_altair with threshold highlighting."""
+    chart = viz.plot_roc_curve_altair(
+        sample_eval_table_with_curves,
+        threshold=0.5,
+    )
+    assert chart is not None
+    # The chart should contain multiple layers when threshold is specified
+    chart_dict = chart.to_dict()
+    assert "layer" in chart_dict or "mark" in chart_dict
+
+
+@needs_altair
+def test_plot_roc_curve_altair_custom_dimensions(sample_eval_table_with_curves):
+    """Test plot_roc_curve_altair with custom width and height."""
+    chart = viz.plot_roc_curve_altair(
+        sample_eval_table_with_curves,
+        width=600,
+        height=500,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert chart_dict.get("width") == 600
+    assert chart_dict.get("height") == 500
+
+
+@needs_altair
+def test_plot_roc_curve_altair_missing_curve_data_error(
+    sample_eval_table_without_curves,
+):
+    """Test plot_roc_curve_altair raises error when curve data is missing."""
+    with pytest.raises(ValueError, match="ROC curve data columns not found"):
+        viz.plot_roc_curve_altair(sample_eval_table_without_curves)
+
+
+@needs_altair
+def test_plot_pr_curve_altair_runs(sample_eval_table_with_curves):
+    """Test that plot_precision_recall_curve_altair runs without error."""
+    chart = viz.plot_precision_recall_curve_altair(sample_eval_table_with_curves)
+    assert chart is not None
+    assert hasattr(chart, "to_dict")
+
+
+@needs_altair
+def test_plot_pr_curve_altair_with_threshold(sample_eval_table_with_curves):
+    """Test plot_precision_recall_curve_altair with threshold highlighting."""
+    chart = viz.plot_precision_recall_curve_altair(
+        sample_eval_table_with_curves,
+        threshold=0.5,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert "layer" in chart_dict or "mark" in chart_dict
+
+
+@needs_altair
+def test_plot_pr_curve_altair_custom_dimensions(sample_eval_table_with_curves):
+    """Test plot_precision_recall_curve_altair with custom width and height."""
+    chart = viz.plot_precision_recall_curve_altair(
+        sample_eval_table_with_curves,
+        width=500,
+        height=400,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert chart_dict.get("width") == 500
+    assert chart_dict.get("height") == 400
+
+
+@needs_altair
+def test_plot_pr_curve_altair_missing_curve_data_error(
+    sample_eval_table_without_curves,
+):
+    """Test plot_precision_recall_curve_altair raises error when curve data is missing."""
+    with pytest.raises(ValueError, match="PR curve data columns not found"):
+        viz.plot_precision_recall_curve_altair(sample_eval_table_without_curves)
+
+
+def test_altair_import_error_without_altair():
+    """Test that Altair functions raise ImportError when altair is not available."""
+    # This test checks the error message when altair is not installed
+    # We can't easily test this if altair IS installed, so we'll skip if it is
+    if viz._ALTAIR_AVAILABLE:
+        pytest.skip("Altair is available, cannot test ImportError path")
+
+    # Create a dummy table (won't actually be used since import check happens first)
+    dummy_table = pa.table({"x": [1, 2, 3]})
+
+    with pytest.raises(ImportError, match="altair is required"):
+        viz.plot_roc_curve_altair(dummy_table)
+
+    with pytest.raises(ImportError, match="altair is required"):
+        viz.plot_precision_recall_curve_altair(dummy_table)

@@ -1745,3 +1745,167 @@ def test_evaluation_force_eval_with_duplicates_counts_unique_with_ci(
             many_thresholds_with_duplicates,
             calculate_threshold_ci=True,  # Enable CI to trigger the limit
         )
+
+
+##################################
+# Tests for export_roc_curve_data #
+##################################
+
+
+def test_evaluation_export_roc_curve_data_basic(synth_table_with_metadata):
+    """Test that export_roc_curve_data=True adds curve columns to output."""
+    table = synth_table_with_metadata
+    modelid = "test_curve_export"
+    filter_desc = "basic_synth"
+    thresholds = [0.5]
+
+    results = evaluation(
+        table,
+        modelid,
+        filter_desc,
+        thresholds,
+        export_roc_curve_data=True,
+    )
+
+    assert isinstance(results, pa.Table)
+
+    # Check that curve columns exist
+    curve_cols = [
+        "ROC_FPR",
+        "ROC_TPR",
+        "ROC_Thresholds",
+        "PR_Precision",
+        "PR_Recall",
+        "PR_Thresholds",
+    ]
+    for col in curve_cols:
+        assert col in results.column_names, f"Column {col} not found in results"
+
+    # Check that curve columns have list type
+    for col in curve_cols:
+        assert pa.types.is_list(results.schema.field(col).type), (
+            f"Column {col} should be list type"
+        )
+
+    # Convert to pandas for easier inspection
+    df = results.to_pandas()
+
+    # Check ROC curve data
+    roc_fpr = df["ROC_FPR"].iloc[0]
+    roc_tpr = df["ROC_TPR"].iloc[0]
+    roc_thresholds = df["ROC_Thresholds"].iloc[0]
+
+    assert roc_fpr is not None
+    assert roc_tpr is not None
+    assert roc_thresholds is not None
+    assert len(roc_fpr) > 0
+    assert len(roc_fpr) == len(roc_tpr)
+    assert len(roc_fpr) == len(roc_thresholds)
+
+    # Check PR curve data
+    pr_precision = df["PR_Precision"].iloc[0]
+    pr_recall = df["PR_Recall"].iloc[0]
+    pr_thresholds = df["PR_Thresholds"].iloc[0]
+
+    assert pr_precision is not None
+    assert pr_recall is not None
+    assert pr_thresholds is not None
+    assert len(pr_precision) > 0
+    assert len(pr_precision) == len(pr_recall)
+    # Note: PR thresholds has length n-1 where n is length of precision/recall
+    assert len(pr_thresholds) == len(pr_precision) - 1
+
+
+def test_evaluation_export_roc_curve_data_false_by_default(synth_table_with_metadata):
+    """Test that curve columns are NOT present when export_roc_curve_data=False (default)."""
+    table = synth_table_with_metadata
+    results = evaluation(table, "m", "f", [0.5])
+
+    curve_cols = [
+        "ROC_FPR",
+        "ROC_TPR",
+        "ROC_Thresholds",
+        "PR_Precision",
+        "PR_Recall",
+        "PR_Thresholds",
+    ]
+    for col in curve_cols:
+        assert col not in results.column_names, f"Column {col} should not be present"
+
+
+def test_evaluation_export_roc_curve_data_values_valid(synth_table_with_metadata):
+    """Test that ROC/PR curve values are within expected ranges."""
+    table = synth_table_with_metadata
+    results = evaluation(
+        table,
+        "test_curve",
+        "test",
+        [0.5],
+        export_roc_curve_data=True,
+    )
+
+    df = results.to_pandas()
+
+    # Check ROC curve values are in valid range [0, 1]
+    roc_fpr = df["ROC_FPR"].iloc[0]
+    roc_tpr = df["ROC_TPR"].iloc[0]
+    assert all(0 <= x <= 1 for x in roc_fpr), "FPR values should be in [0, 1]"
+    assert all(0 <= x <= 1 for x in roc_tpr), "TPR values should be in [0, 1]"
+
+    # Check PR curve values are in valid range [0, 1]
+    pr_precision = df["PR_Precision"].iloc[0]
+    pr_recall = df["PR_Recall"].iloc[0]
+    assert all(0 <= x <= 1 for x in pr_precision), (
+        "Precision values should be in [0, 1]"
+    )
+    assert all(0 <= x <= 1 for x in pr_recall), "Recall values should be in [0, 1]"
+
+
+def test_evaluation_export_roc_curve_data_same_across_thresholds(
+    synth_table_with_metadata,
+):
+    """Test that curve data is the same for all threshold rows (computed once)."""
+    table = synth_table_with_metadata
+    results = evaluation(
+        table,
+        "test_curve",
+        "test",
+        [0.3, 0.5, 0.7],
+        export_roc_curve_data=True,
+    )
+
+    df = results.to_pandas()
+
+    # Check that curve data is identical for all rows
+    first_row_fpr = df["ROC_FPR"].iloc[0]
+    first_row_tpr = df["ROC_TPR"].iloc[0]
+
+    for i in range(1, len(df)):
+        # Use list comparison since pandas stores as lists
+        assert list(df["ROC_FPR"].iloc[i]) == list(first_row_fpr), (
+            "ROC_FPR should be same for all rows"
+        )
+        assert list(df["ROC_TPR"].iloc[i]) == list(first_row_tpr), (
+            "ROC_TPR should be same for all rows"
+        )
+
+
+@pytest.mark.filterwarnings("ignore::UserWarning")
+def test_evaluation_export_roc_curve_data_single_class(synth_table_all_pos):
+    """Test that curve data is None when only one class is present."""
+    table = synth_table_all_pos
+    results = evaluation(
+        table,
+        "test_curve",
+        "test",
+        [0.5],
+        export_roc_curve_data=True,
+    )
+
+    df = results.to_pandas()
+
+    # Curve data should be None when only one class is present
+    assert df["ROC_FPR"].iloc[0] is None
+    assert df["ROC_TPR"].iloc[0] is None
+    assert df["PR_Precision"].iloc[0] is None
+    assert df["PR_Recall"].iloc[0] is None
