@@ -366,181 +366,363 @@ def format_evaluation_table(
 
 # --- Plotting Functions ---
 
-# Guard imports for plotting libraries
+# Guard import for Altair
 try:
-    import matplotlib.pyplot as plt
-    from matplotlib.axes import Axes
+    import altair as alt
 
-    _MATPLOTLIB_AVAILABLE = True
+    _ALTAIR_AVAILABLE = True
 except ImportError:
-    plt = None
-    Axes = None  # type: ignore # Need to define Axes type hint even if unavailable
-    _MATPLOTLIB_AVAILABLE = False
-
-try:
-    from sklearn.metrics import auc, precision_recall_curve, roc_curve
-
-    _SKLEARN_METRICS_AVAILABLE = True
-except ImportError:
-    roc_curve = None
-    precision_recall_curve = None
-    auc = None
-    _SKLEARN_METRICS_AVAILABLE = False
+    alt = None
+    _ALTAIR_AVAILABLE = False
 
 
 def plot_roc_curve(
-    y_true: Any,
-    y_score: Any,
-    model_name: str | None = None,
-    ax: Any | None = None,
-    **kwargs,
-):
+    evaluation_result: pa.Table,
+    threshold: float | None = None,
+    width: int = 400,
+    height: int = 400,
+) -> Any:
     """
-    Plots the Receiver Operating Characteristic (ROC) curve.
+    Plots the ROC curve using Altair from evaluation results.
+
+    This function consumes the output of `pysalient.evaluation.evaluation()`
+    when called with `export_roc_curve_data=True`, and creates an interactive
+    Altair chart displaying the ROC curve.
 
     Args:
-        y_true: True binary labels.
-        y_score: Target scores, can either be probability estimates of the positive
-                 class or confidence values.
-        model_name: Optional name of the model for the plot label.
-        ax: Optional Matplotlib Axes object to plot on. If None, a new figure
-            and axes are created.
-        **kwargs: Additional keyword arguments passed to `ax.plot()`.
+        evaluation_result: PyArrow Table from evaluation() with export_roc_curve_data=True.
+                          Must contain 'ROC_FPR', 'ROC_TPR', 'ROC_Thresholds', and 'AUROC' columns.
+        threshold: Optional threshold value to highlight on the curve. When provided,
+                   displays a point marker at the corresponding (FPR, TPR) position,
+                   an annotation with the threshold value, and dashed lines to both axes.
+        width: Chart width in pixels. Defaults to 400.
+        height: Chart height in pixels. Defaults to 400.
 
     Returns:
-        matplotlib.axes.Axes: The Axes object with the ROC curve plotted.
+        altair.Chart: The ROC curve chart object, ready for display in Jupyter
+                      or export to various formats.
 
     Raises:
-        ImportError: If matplotlib or scikit-learn is not installed.
+        ImportError: If Altair is not installed.
+        ValueError: If ROC curve data columns are not found in evaluation_result.
+
+    Example:
+        >>> import pysalient.evaluation as ev
+        >>> import pysalient.visualisation as viz
+        >>> result = ev.evaluation(data, "model1", "test", [0.3, 0.5], export_roc_curve_data=True)
+        >>> chart = viz.plot_roc_curve(result, threshold=0.5)
+        >>> chart  # Display in Jupyter
     """
-    if not _MATPLOTLIB_AVAILABLE:
-        raise ImportError("matplotlib is required for plotting. Please install it.")
-    if not _SKLEARN_METRICS_AVAILABLE or roc_curve is None or auc is None:
+    if not _ALTAIR_AVAILABLE:
         raise ImportError(
-            "scikit-learn is required for ROC calculation. Please install it."
+            "altair is required for this function. "
+            "Please install it with: pip install altair>=5.0"
         )
 
-    # Ensure input arrays are numpy arrays for sklearn compatibility
-    # (Assuming they might be passed as lists or pandas Series)
-    try:
-        import numpy as np
-
-        y_true_np = np.asarray(y_true)
-        y_score_np = np.asarray(y_score)
-    except ImportError:
-        # numpy should be a core dependency anyway, but handle just in case
-        raise ImportError("numpy is required for data processing before plotting.")
-    except Exception as e:
-        raise TypeError(f"Could not convert y_true or y_score to NumPy arrays: {e}")
-
-    if ax is None and plt is not None:
-        fig, ax = plt.subplots(figsize=(8, 8))  # Create figure and axes if not provided
-    elif ax is None:
-        # This case should not happen if _MATPLOTLIB_AVAILABLE is True, but safety check
-        raise RuntimeError(
-            "Matplotlib Axes object not provided and could not be created."
+    # Validate required columns exist
+    required_cols = ["ROC_FPR", "ROC_TPR", "ROC_Thresholds", "AUROC"]
+    missing_cols = [
+        col for col in required_cols if col not in evaluation_result.column_names
+    ]
+    if missing_cols:
+        raise ValueError(
+            f"ROC curve data columns not found: {missing_cols}. "
+            "Call evaluation() with export_roc_curve_data=True to include curve data."
         )
 
-    # Calculate ROC curve points
-    fpr, tpr, thresholds = roc_curve(y_true_np, y_score_np)
-    roc_auc = auc(fpr, tpr)
+    # Extract first row (curve data is same for all thresholds)
+    df = evaluation_result.to_pandas()
+    fpr = df["ROC_FPR"].iloc[0]
+    tpr = df["ROC_TPR"].iloc[0]
+    thresholds = df["ROC_Thresholds"].iloc[0]
+    auroc = df["AUROC"].iloc[0]
 
-    # Construct the label
-    plot_label = f"AUC = {roc_auc:0.2f}"
-    if model_name:
-        plot_label = f"{model_name} (AUC = {roc_auc:0.2f})"
-    else:
-        plot_label = f"ROC curve (AUC = {roc_auc:0.2f})"
+    # Handle None/NaN curve data
+    if fpr is None or tpr is None:
+        raise ValueError(
+            "ROC curve data is None. This may occur when only one class is present in labels."
+        )
 
-    # Plot the ROC curve
-    ax.plot(fpr, tpr, label=plot_label, **kwargs)
+    # Create curve dataframe
+    import numpy as np
 
-    # Plot the chance line
-    ax.plot([0, 1], [0, 1], color="grey", linestyle="--", label="Chance (AUC = 0.5)")
+    curve_df = pd.DataFrame({"FPR": fpr, "TPR": tpr, "Threshold": thresholds})
 
-    # Set labels, title, limits, grid, legend, aspect ratio
-    ax.set_xlabel("False Positive Rate (1 - Specificity)")
-    ax.set_ylabel("True Positive Rate (Sensitivity)")
-    ax.set_title("Receiver Operating Characteristic (ROC) Curve")
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])  # Slightly above 1 for visibility
-    ax.legend(loc="lower right")
-    ax.grid(True)
-    ax.set_aspect("equal", adjustable="box")
+    # Base ROC curve
+    roc_line = (
+        alt.Chart(curve_df)
+        .mark_line(color="steelblue", strokeWidth=2)
+        .encode(
+            x=alt.X(
+                "FPR:Q",
+                title="False Positive Rate (1 - Specificity)",
+                scale=alt.Scale(domain=[0, 1]),
+            ),
+            y=alt.Y(
+                "TPR:Q",
+                title="True Positive Rate (Sensitivity)",
+                scale=alt.Scale(domain=[0, 1]),
+            ),
+            tooltip=[
+                alt.Tooltip("FPR:Q", format=".3f", title="FPR"),
+                alt.Tooltip("TPR:Q", format=".3f", title="TPR"),
+                alt.Tooltip("Threshold:Q", format=".3f", title="Threshold"),
+            ],
+        )
+    )
 
-    return ax
+    # Diagonal reference line (chance line)
+    diagonal_df = pd.DataFrame({"x": [0, 1], "y": [0, 1]})
+    diagonal = (
+        alt.Chart(diagonal_df)
+        .mark_line(strokeDash=[5, 5], color="grey", strokeWidth=1)
+        .encode(x=alt.X("x:Q"), y=alt.Y("y:Q"))
+    )
+
+    # Title with AUROC
+    title = f"ROC Curve (AUROC = {auroc:.3f})"
+
+    # Combine base chart
+    chart = (roc_line + diagonal).properties(width=width, height=height, title=title)
+
+    # Add threshold highlighting if specified
+    if threshold is not None:
+        # Find closest threshold point
+        threshold_array = np.array(thresholds)
+        idx = np.abs(threshold_array - threshold).argmin()
+        point_fpr = fpr[idx]
+        point_tpr = tpr[idx]
+        actual_threshold = thresholds[idx]
+
+        point_df = pd.DataFrame(
+            {"FPR": [point_fpr], "TPR": [point_tpr], "Threshold": [actual_threshold]}
+        )
+
+        # Point marker
+        point = (
+            alt.Chart(point_df)
+            .mark_circle(size=100, color="red", filled=True)
+            .encode(
+                x="FPR:Q",
+                y="TPR:Q",
+                tooltip=[
+                    alt.Tooltip("FPR:Q", format=".3f", title="FPR"),
+                    alt.Tooltip("TPR:Q", format=".3f", title="TPR"),
+                    alt.Tooltip("Threshold:Q", format=".3f", title="Threshold"),
+                ],
+            )
+        )
+
+        # Annotation text
+        text = (
+            alt.Chart(point_df)
+            .mark_text(
+                align="left", dx=10, dy=-10, fontSize=12, color="red", fontWeight="bold"
+            )
+            .encode(x="FPR:Q", y="TPR:Q", text=alt.value(f"t={actual_threshold:.3f}"))
+        )
+
+        # Horizontal line to y-axis
+        h_line_df = pd.DataFrame({"x": [0, point_fpr], "y": [point_tpr, point_tpr]})
+        h_line = (
+            alt.Chart(h_line_df)
+            .mark_line(strokeDash=[2, 2], color="red", opacity=0.5, strokeWidth=1)
+            .encode(x="x:Q", y="y:Q")
+        )
+
+        # Vertical line to x-axis
+        v_line_df = pd.DataFrame({"x": [point_fpr, point_fpr], "y": [0, point_tpr]})
+        v_line = (
+            alt.Chart(v_line_df)
+            .mark_line(strokeDash=[2, 2], color="red", opacity=0.5, strokeWidth=1)
+            .encode(x="x:Q", y="y:Q")
+        )
+
+        chart = chart + point + text + h_line + v_line
+
+    return chart
 
 
 def plot_precision_recall_curve(
-    y_true: Any,
-    y_score: Any,
-    model_name: str | None = None,
-    ax: Any | None = None,
-    **kwargs,
-):
+    evaluation_result: pa.Table,
+    threshold: float | None = None,
+    width: int = 400,
+    height: int = 400,
+) -> Any:
     """
-    Plots the Precision-Recall (PR) curve.
+    Plots the Precision-Recall curve using Altair from evaluation results.
+
+    This function consumes the output of `pysalient.evaluation.evaluation()`
+    when called with `export_roc_curve_data=True`, and creates an interactive
+    Altair chart displaying the Precision-Recall curve.
 
     Args:
-        y_true: True binary labels.
-        y_score: Target scores, can either be probability estimates of the positive
-                 class or confidence values.
-        model_name: Optional name of the model for the plot label.
-        ax: Optional Matplotlib Axes object to plot on. If None, a new figure
-            and axes are created.
-        **kwargs: Additional keyword arguments passed to `ax.plot()`.
+        evaluation_result: PyArrow Table from evaluation() with export_roc_curve_data=True.
+                          Must contain 'PR_Precision', 'PR_Recall', 'PR_Thresholds',
+                          and 'AUPRC' columns.
+        threshold: Optional threshold value to highlight on the curve. When provided,
+                   displays a point marker at the corresponding (Recall, Precision) position,
+                   an annotation with the threshold value, and dashed lines to both axes.
+        width: Chart width in pixels. Defaults to 400.
+        height: Chart height in pixels. Defaults to 400.
 
     Returns:
-        matplotlib.axes.Axes: The Axes object with the PR curve plotted.
+        altair.Chart: The Precision-Recall curve chart object, ready for display
+                      in Jupyter or export to various formats.
 
     Raises:
-        ImportError: If matplotlib or scikit-learn is not installed.
+        ImportError: If Altair is not installed.
+        ValueError: If PR curve data columns are not found in evaluation_result.
+
+    Example:
+        >>> import pysalient.evaluation as ev
+        >>> import pysalient.visualisation as viz
+        >>> result = ev.evaluation(data, "model1", "test", [0.3, 0.5], export_roc_curve_data=True)
+        >>> chart = viz.plot_precision_recall_curve(result, threshold=0.5)
+        >>> chart  # Display in Jupyter
     """
-    if not _MATPLOTLIB_AVAILABLE:
-        raise ImportError("matplotlib is required for plotting. Please install it.")
-    if not _SKLEARN_METRICS_AVAILABLE or precision_recall_curve is None:
+    if not _ALTAIR_AVAILABLE:
         raise ImportError(
-            "scikit-learn is required for PR curve calculation. Please install it."
+            "altair is required for this function. "
+            "Please install it with: pip install altair>=5.0"
         )
 
-    # Ensure input arrays are numpy arrays for sklearn compatibility
-    try:
-        import numpy as np
-
-        y_true_np = np.asarray(y_true)
-        y_score_np = np.asarray(y_score)
-    except ImportError:
-        raise ImportError("numpy is required for data processing before plotting.")
-    except Exception as e:
-        raise TypeError(f"Could not convert y_true or y_score to NumPy arrays: {e}")
-
-    if ax is None and plt is not None:
-        fig, ax = plt.subplots(figsize=(8, 8))  # Create figure and axes if not provided
-    elif ax is None:
-        raise RuntimeError(
-            "Matplotlib Axes object not provided and could not be created."
+    # Validate required columns exist
+    required_cols = ["PR_Precision", "PR_Recall", "PR_Thresholds", "AUPRC"]
+    missing_cols = [
+        col for col in required_cols if col not in evaluation_result.column_names
+    ]
+    if missing_cols:
+        raise ValueError(
+            f"PR curve data columns not found: {missing_cols}. "
+            "Call evaluation() with export_roc_curve_data=True to include curve data."
         )
 
-    # Calculate Precision-Recall curve points
-    precision, recall, _ = precision_recall_curve(y_true_np, y_score_np)
+    # Extract first row (curve data is same for all thresholds)
+    df = evaluation_result.to_pandas()
+    precision = df["PR_Precision"].iloc[0]
+    recall = df["PR_Recall"].iloc[0]
+    pr_thresholds = df["PR_Thresholds"].iloc[0]
+    auprc = df["AUPRC"].iloc[0]
 
-    # Construct the label
-    plot_label = "PR Curve"
-    if model_name:
-        plot_label = f"{model_name} (PR Curve)"
+    # Handle None/NaN curve data
+    if precision is None or recall is None:
+        raise ValueError(
+            "PR curve data is None. This may occur when only one class is present in labels."
+        )
 
-    # Plot the Precision-Recall curve
-    # Note: Plotting recall (x) vs precision (y)
-    ax.plot(recall, precision, label=plot_label, **kwargs)
+    # Note: sklearn's precision_recall_curve returns thresholds with length n-1
+    # where n is the length of precision/recall. The last precision/recall point
+    # corresponds to threshold=1.0 (all predictions negative).
+    # We need to handle this length mismatch.
+    import numpy as np
 
-    # Set labels, title, limits, grid, legend
-    ax.set_xlabel("Recall (Sensitivity)")
-    ax.set_ylabel("Precision")
-    ax.set_title("Precision-Recall Curve")
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])  # Slightly above 1 for visibility
-    ax.legend(loc="best")  # Often lower-left or best for PR curves
-    ax.grid(True)
-    # Aspect ratio is usually not set to 'equal' for PR curves
+    # Extend thresholds to match precision/recall length
+    # The last point is at threshold approaching infinity (or 1.0 for normalized scores)
+    if len(pr_thresholds) < len(precision):
+        extended_thresholds = list(pr_thresholds) + [1.0] * (
+            len(precision) - len(pr_thresholds)
+        )
+    else:
+        extended_thresholds = pr_thresholds
 
-    return ax
+    # Create curve dataframe
+    curve_df = pd.DataFrame(
+        {"Recall": recall, "Precision": precision, "Threshold": extended_thresholds}
+    )
+
+    # Base PR curve
+    pr_line = (
+        alt.Chart(curve_df)
+        .mark_line(color="darkorange", strokeWidth=2)
+        .encode(
+            x=alt.X(
+                "Recall:Q", title="Recall (Sensitivity)", scale=alt.Scale(domain=[0, 1])
+            ),
+            y=alt.Y("Precision:Q", title="Precision", scale=alt.Scale(domain=[0, 1])),
+            tooltip=[
+                alt.Tooltip("Recall:Q", format=".3f", title="Recall"),
+                alt.Tooltip("Precision:Q", format=".3f", title="Precision"),
+                alt.Tooltip("Threshold:Q", format=".3f", title="Threshold"),
+            ],
+        )
+    )
+
+    # Title with AUPRC
+    title = f"Precision-Recall Curve (AUPRC = {auprc:.3f})"
+
+    # Base chart (no diagonal for PR curves)
+    chart = pr_line.properties(width=width, height=height, title=title)
+
+    # Add threshold highlighting if specified
+    if threshold is not None:
+        # Find closest threshold point (use original thresholds for matching)
+        threshold_array = np.array(pr_thresholds)
+        idx = np.abs(threshold_array - threshold).argmin()
+
+        # Ensure we don't go out of bounds
+        idx = min(idx, len(recall) - 1)
+
+        point_recall = recall[idx]
+        point_precision = precision[idx]
+        actual_threshold = pr_thresholds[idx] if idx < len(pr_thresholds) else 1.0
+
+        point_df = pd.DataFrame(
+            {
+                "Recall": [point_recall],
+                "Precision": [point_precision],
+                "Threshold": [actual_threshold],
+            }
+        )
+
+        # Point marker
+        point = (
+            alt.Chart(point_df)
+            .mark_circle(size=100, color="red", filled=True)
+            .encode(
+                x="Recall:Q",
+                y="Precision:Q",
+                tooltip=[
+                    alt.Tooltip("Recall:Q", format=".3f", title="Recall"),
+                    alt.Tooltip("Precision:Q", format=".3f", title="Precision"),
+                    alt.Tooltip("Threshold:Q", format=".3f", title="Threshold"),
+                ],
+            )
+        )
+
+        # Annotation text
+        text = (
+            alt.Chart(point_df)
+            .mark_text(
+                align="left", dx=10, dy=-10, fontSize=12, color="red", fontWeight="bold"
+            )
+            .encode(
+                x="Recall:Q",
+                y="Precision:Q",
+                text=alt.value(f"t={actual_threshold:.3f}"),
+            )
+        )
+
+        # Horizontal line to y-axis
+        h_line_df = pd.DataFrame(
+            {"x": [0, point_recall], "y": [point_precision, point_precision]}
+        )
+        h_line = (
+            alt.Chart(h_line_df)
+            .mark_line(strokeDash=[2, 2], color="red", opacity=0.5, strokeWidth=1)
+            .encode(x="x:Q", y="y:Q")
+        )
+
+        # Vertical line to x-axis
+        v_line_df = pd.DataFrame(
+            {"x": [point_recall, point_recall], "y": [0, point_precision]}
+        )
+        v_line = (
+            alt.Chart(v_line_df)
+            .mark_line(strokeDash=[2, 2], color="red", opacity=0.5, strokeWidth=1)
+            .encode(x="x:Q", y="y:Q")
+        )
+
+        chart = chart + point + text + h_line + v_line
+
+    return chart
