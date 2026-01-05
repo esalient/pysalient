@@ -366,27 +366,6 @@ def format_evaluation_table(
 
 # --- Plotting Functions ---
 
-# Guard imports for plotting libraries
-try:
-    import matplotlib.pyplot as plt
-    from matplotlib.axes import Axes
-
-    _MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    plt = None
-    Axes = None  # type: ignore # Need to define Axes type hint even if unavailable
-    _MATPLOTLIB_AVAILABLE = False
-
-try:
-    from sklearn.metrics import auc, precision_recall_curve, roc_curve
-
-    _SKLEARN_METRICS_AVAILABLE = True
-except ImportError:
-    roc_curve = None
-    precision_recall_curve = None
-    auc = None
-    _SKLEARN_METRICS_AVAILABLE = False
-
 # Guard import for Altair
 try:
     import altair as alt
@@ -398,167 +377,6 @@ except ImportError:
 
 
 def plot_roc_curve(
-    y_true: Any,
-    y_score: Any,
-    model_name: str | None = None,
-    ax: Any | None = None,
-    **kwargs,
-):
-    """
-    Plots the Receiver Operating Characteristic (ROC) curve.
-
-    Args:
-        y_true: True binary labels.
-        y_score: Target scores, can either be probability estimates of the positive
-                 class or confidence values.
-        model_name: Optional name of the model for the plot label.
-        ax: Optional Matplotlib Axes object to plot on. If None, a new figure
-            and axes are created.
-        **kwargs: Additional keyword arguments passed to `ax.plot()`.
-
-    Returns:
-        matplotlib.axes.Axes: The Axes object with the ROC curve plotted.
-
-    Raises:
-        ImportError: If matplotlib or scikit-learn is not installed.
-    """
-    if not _MATPLOTLIB_AVAILABLE:
-        raise ImportError("matplotlib is required for plotting. Please install it.")
-    if not _SKLEARN_METRICS_AVAILABLE or roc_curve is None or auc is None:
-        raise ImportError(
-            "scikit-learn is required for ROC calculation. Please install it."
-        )
-
-    # Ensure input arrays are numpy arrays for sklearn compatibility
-    # (Assuming they might be passed as lists or pandas Series)
-    try:
-        import numpy as np
-
-        y_true_np = np.asarray(y_true)
-        y_score_np = np.asarray(y_score)
-    except ImportError:
-        # numpy should be a core dependency anyway, but handle just in case
-        raise ImportError("numpy is required for data processing before plotting.")
-    except Exception as e:
-        raise TypeError(f"Could not convert y_true or y_score to NumPy arrays: {e}")
-
-    if ax is None and plt is not None:
-        fig, ax = plt.subplots(figsize=(8, 8))  # Create figure and axes if not provided
-    elif ax is None:
-        # This case should not happen if _MATPLOTLIB_AVAILABLE is True, but safety check
-        raise RuntimeError(
-            "Matplotlib Axes object not provided and could not be created."
-        )
-
-    # Calculate ROC curve points
-    fpr, tpr, thresholds = roc_curve(y_true_np, y_score_np)
-    roc_auc = auc(fpr, tpr)
-
-    # Construct the label
-    plot_label = f"AUC = {roc_auc:0.2f}"
-    if model_name:
-        plot_label = f"{model_name} (AUC = {roc_auc:0.2f})"
-    else:
-        plot_label = f"ROC curve (AUC = {roc_auc:0.2f})"
-
-    # Plot the ROC curve
-    ax.plot(fpr, tpr, label=plot_label, **kwargs)
-
-    # Plot the chance line
-    ax.plot([0, 1], [0, 1], color="grey", linestyle="--", label="Chance (AUC = 0.5)")
-
-    # Set labels, title, limits, grid, legend, aspect ratio
-    ax.set_xlabel("False Positive Rate (1 - Specificity)")
-    ax.set_ylabel("True Positive Rate (Sensitivity)")
-    ax.set_title("Receiver Operating Characteristic (ROC) Curve")
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])  # Slightly above 1 for visibility
-    ax.legend(loc="lower right")
-    ax.grid(True)
-    ax.set_aspect("equal", adjustable="box")
-
-    return ax
-
-
-def plot_precision_recall_curve(
-    y_true: Any,
-    y_score: Any,
-    model_name: str | None = None,
-    ax: Any | None = None,
-    **kwargs,
-):
-    """
-    Plots the Precision-Recall (PR) curve.
-
-    Args:
-        y_true: True binary labels.
-        y_score: Target scores, can either be probability estimates of the positive
-                 class or confidence values.
-        model_name: Optional name of the model for the plot label.
-        ax: Optional Matplotlib Axes object to plot on. If None, a new figure
-            and axes are created.
-        **kwargs: Additional keyword arguments passed to `ax.plot()`.
-
-    Returns:
-        matplotlib.axes.Axes: The Axes object with the PR curve plotted.
-
-    Raises:
-        ImportError: If matplotlib or scikit-learn is not installed.
-    """
-    if not _MATPLOTLIB_AVAILABLE:
-        raise ImportError("matplotlib is required for plotting. Please install it.")
-    if not _SKLEARN_METRICS_AVAILABLE or precision_recall_curve is None:
-        raise ImportError(
-            "scikit-learn is required for PR curve calculation. Please install it."
-        )
-
-    # Ensure input arrays are numpy arrays for sklearn compatibility
-    try:
-        import numpy as np
-
-        y_true_np = np.asarray(y_true)
-        y_score_np = np.asarray(y_score)
-    except ImportError:
-        raise ImportError("numpy is required for data processing before plotting.")
-    except Exception as e:
-        raise TypeError(f"Could not convert y_true or y_score to NumPy arrays: {e}")
-
-    if ax is None and plt is not None:
-        fig, ax = plt.subplots(figsize=(8, 8))  # Create figure and axes if not provided
-    elif ax is None:
-        raise RuntimeError(
-            "Matplotlib Axes object not provided and could not be created."
-        )
-
-    # Calculate Precision-Recall curve points
-    precision, recall, _ = precision_recall_curve(y_true_np, y_score_np)
-
-    # Construct the label
-    plot_label = "PR Curve"
-    if model_name:
-        plot_label = f"{model_name} (PR Curve)"
-
-    # Plot the Precision-Recall curve
-    # Note: Plotting recall (x) vs precision (y)
-    ax.plot(recall, precision, label=plot_label, **kwargs)
-
-    # Set labels, title, limits, grid, legend
-    ax.set_xlabel("Recall (Sensitivity)")
-    ax.set_ylabel("Precision")
-    ax.set_title("Precision-Recall Curve")
-    ax.set_xlim([0.0, 1.0])
-    ax.set_ylim([0.0, 1.05])  # Slightly above 1 for visibility
-    ax.legend(loc="best")  # Often lower-left or best for PR curves
-    ax.grid(True)
-    # Aspect ratio is usually not set to 'equal' for PR curves
-
-    return ax
-
-
-# --- Altair Plotting Functions ---
-
-
-def plot_roc_curve_altair(
     evaluation_result: pa.Table,
     threshold: float | None = None,
     width: int = 400,
@@ -592,7 +410,7 @@ def plot_roc_curve_altair(
         >>> import pysalient.evaluation as ev
         >>> import pysalient.visualisation as viz
         >>> result = ev.evaluation(data, "model1", "test", [0.3, 0.5], export_roc_curve_data=True)
-        >>> chart = viz.plot_roc_curve_altair(result, threshold=0.5)
+        >>> chart = viz.plot_roc_curve(result, threshold=0.5)
         >>> chart  # Display in Jupyter
     """
     if not _ALTAIR_AVAILABLE:
@@ -725,7 +543,7 @@ def plot_roc_curve_altair(
     return chart
 
 
-def plot_precision_recall_curve_altair(
+def plot_precision_recall_curve(
     evaluation_result: pa.Table,
     threshold: float | None = None,
     width: int = 400,
@@ -760,7 +578,7 @@ def plot_precision_recall_curve_altair(
         >>> import pysalient.evaluation as ev
         >>> import pysalient.visualisation as viz
         >>> result = ev.evaluation(data, "model1", "test", [0.3, 0.5], export_roc_curve_data=True)
-        >>> chart = viz.plot_precision_recall_curve_altair(result, threshold=0.5)
+        >>> chart = viz.plot_precision_recall_curve(result, threshold=0.5)
         >>> chart  # Display in Jupyter
     """
     if not _ALTAIR_AVAILABLE:
