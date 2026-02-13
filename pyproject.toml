@@ -37,7 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "furo",
-    "ty",
+    "ty>=0.0.16",
     "myst-parser",
     "pytest",
     "ruff",
