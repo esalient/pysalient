@@ -75,10 +75,15 @@ def test_export_formatted_results_all_format_branches(tmp_path):
 
     csv_path = tmp_path / "out.csv"
     parquet_path = tmp_path / "out.parquet"
-    assert export_formatted_results(styler, output_path=str(csv_path), format="csv") is None
+    assert (
+        export_formatted_results(styler, output_path=str(csv_path), format="csv")
+        is None
+    )
     assert csv_path.exists()
     assert (
-        export_formatted_results(styler, output_path=str(parquet_path), format="parquet")
+        export_formatted_results(
+            styler, output_path=str(parquet_path), format="parquet"
+        )
         is None
     )
     assert parquet_path.exists()

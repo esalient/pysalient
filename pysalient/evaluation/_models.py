@@ -92,7 +92,9 @@ class ConfidenceIntervalConfig(BaseConfig):
     bootstrap_seed: object | None = None
 
     @model_validator(mode="after")
-    def validate_bootstrap_rounds_when_bootstrap_used(self) -> "ConfidenceIntervalConfig":
+    def validate_bootstrap_rounds_when_bootstrap_used(
+        self,
+    ) -> "ConfidenceIntervalConfig":
         supported_threshold_ci_methods = {
             ThresholdCIMethod.BOOTSTRAP,
             ThresholdCIMethod.NORMAL,
@@ -108,8 +110,10 @@ class ConfidenceIntervalConfig(BaseConfig):
         if ci_enabled and not (0 < self.alpha < 1):
             raise ValueError("alpha must be between 0 and 1 when CI is enabled.")
 
-        if self.calculate_au_ci and self.bootstrap_seed is not None and not isinstance(
-            self.bootstrap_seed, int
+        if (
+            self.calculate_au_ci
+            and self.bootstrap_seed is not None
+            and not isinstance(self.bootstrap_seed, int)
         ):
             raise ValueError(
                 "bootstrap_seed must be an integer or None when AU bootstrap CI is enabled."

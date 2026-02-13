@@ -1,0 +1,3 @@
+kind: Added
+body: Unit tests for I/O utils (_validate_columns, _attach_metadata) and smoke tests for stub modules
+time: 2026-02-13T14:00:04+00:00

@@ -2,8 +2,6 @@
 Tests for the pysalient.evaluation module.
 """
 
-import os
-
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -26,22 +24,6 @@ META_KEY_Y_PROBA = "pysalient.io.y_proba_col"
 # Define standard column names for fixtures
 SYNTH_PROBA_COL = "synth_probas"
 SYNTH_LABEL_COL = "synth_labels"
-
-###################################
-# Constants for Integration Tests #
-###################################
-
-SAMPLE_DATA_PATH = os.path.join("tests", "test_data", "anonymised_sample.parquet")
-# Column map based on the notebook's inspection (adjust if file changes)
-SAMPLE_COL_MAP = {
-    "y_proba": "prediction_proba_1",
-    "y_label": "true_label",
-    "agg": "encounter_id",
-    "time": "event_timestamp",
-    # Optional model/task cols if they existed in the parquet
-    # 'model': 'model_column_name',
-    # 'task': 'task_column_name',
-}
 
 
 @pytest.fixture
@@ -1395,16 +1377,42 @@ def test_evaluation_with_analytical_threshold_ci(
 
 # Fixture to load real data once
 @pytest.fixture(scope="module")
-def loaded_sample_data():
-    if not os.path.exists(SAMPLE_DATA_PATH):
-        pytest.skip(f"Sample data file not found at {SAMPLE_DATA_PATH}")
+def loaded_sample_data(tmp_path_factory):
+    rng = np.random.default_rng(2026)
+    n_rows = 500
+    n_encounters = 160
+
+    encounter_ids = rng.integers(1, n_encounters + 1, size=n_rows)
+    event_offsets = rng.integers(0, 60 * 24, size=n_rows)
+    event_timestamps = pd.Timestamp("2024-01-01") + pd.to_timedelta(
+        event_offsets, unit="m"
+    )
+    prediction_probability = rng.random(size=n_rows)
+    true_label = (
+        prediction_probability > (0.3 + 0.45 * rng.random(size=n_rows))
+    ).astype(int)
+
+    generated_df = pd.DataFrame(
+        {
+            "encounter_id": encounter_ids,
+            "event_timestamp": event_timestamps,
+            "prediction_probability": prediction_probability,
+            "true_label": true_label,
+        }
+    )
+    generated_path = (
+        tmp_path_factory.mktemp("evaluation_generated_data")
+        / "generated_eval_sample.parquet"
+    )
+    generated_df.to_parquet(generated_path, index=False)
+
     try:
         data = csio.load_evaluation_data(
-            source=SAMPLE_DATA_PATH,
-            y_proba_col=SAMPLE_COL_MAP["y_proba"],
-            y_label_col=SAMPLE_COL_MAP["y_label"],
-            aggregation_cols=SAMPLE_COL_MAP["agg"],
-            timeseries_col=SAMPLE_COL_MAP["time"],
+            source=str(generated_path),
+            y_proba_col="prediction_probability",
+            y_label_col="true_label",
+            aggregation_cols="encounter_id",
+            timeseries_col="event_timestamp",
             assign_model_name="sample_model",  # Use assign_model_name for model_id
             assign_task_name="sample_task",  # Use assign_task_name for task_id
         )
@@ -1419,12 +1427,8 @@ def test_integration_load_data_adds_correct_metadata(loaded_sample_data):
     assert data is not None
     metadata = data.schema.metadata
     assert metadata is not None
-    assert metadata.get(META_KEY_Y_PROBA.encode("utf-8")) == SAMPLE_COL_MAP[
-        "y_proba"
-    ].encode("utf-8")
-    assert metadata.get(META_KEY_Y_LABEL.encode("utf-8")) == SAMPLE_COL_MAP[
-        "y_label"
-    ].encode("utf-8")
+    assert metadata.get(META_KEY_Y_PROBA.encode("utf-8")) == b"prediction_probability"
+    assert metadata.get(META_KEY_Y_LABEL.encode("utf-8")) == b"true_label"
     # Check for other potential metadata keys if needed (model_id, task_id etc.)
     # Check metadata added by load_evaluation_data using assign_model_name/assign_task_name
     # Metadata stores the *name* of the column ('model'/'task'), not the assigned value

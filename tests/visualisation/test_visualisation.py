@@ -449,13 +449,19 @@ class _FakeAxes:
 
 def test_plot_roc_curve_executes_without_matplotlib(monkeypatch):
     fake_ax = _FakeAxes()
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
     )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation.roc_curve",
-        lambda y_true, y_score: (np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([0.5, 0.1])),
+        lambda y_true, y_score: (
+            np.array([0.0, 1.0]),
+            np.array([0.0, 1.0]),
+            np.array([0.5, 0.1]),
+        ),
     )
     monkeypatch.setattr("pysalient.visualisation.visualisation.auc", lambda x, y: 0.8)
 
@@ -490,13 +496,19 @@ def test_plot_roc_curve_executes_without_model_name(monkeypatch):
 
 def test_plot_precision_recall_executes_without_matplotlib(monkeypatch):
     fake_ax = _FakeAxes()
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
     )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation.precision_recall_curve",
-        lambda y_true, y_score: (np.array([1.0, 0.5]), np.array([0.0, 1.0]), np.array([0.3])),
+        lambda y_true, y_score: (
+            np.array([1.0, 0.5]),
+            np.array([0.0, 1.0]),
+            np.array([0.3]),
+        ),
     )
 
     ax = viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], model_name="M", ax=fake_ax)
@@ -506,7 +518,9 @@ def test_plot_precision_recall_executes_without_matplotlib(monkeypatch):
 
 
 def test_plot_roc_curve_import_error_when_sklearn_unavailable(monkeypatch):
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", False
     )
@@ -517,24 +531,34 @@ def test_plot_roc_curve_import_error_when_sklearn_unavailable(monkeypatch):
 
 
 def test_plot_pr_curve_import_error_when_sklearn_unavailable(monkeypatch):
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", False
     )
-    monkeypatch.setattr("pysalient.visualisation.visualisation.precision_recall_curve", None)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.precision_recall_curve", None
+    )
     with pytest.raises(ImportError, match="scikit-learn is required for PR"):
         viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], ax=_FakeAxes())
 
 
 def test_plot_roc_curve_runtime_error_when_no_ax_and_no_plt(monkeypatch):
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
     )
     monkeypatch.setattr("pysalient.visualisation.visualisation.plt", None)
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation.roc_curve",
-        lambda y_true, y_score: (np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([0.5, 0.1])),
+        lambda y_true, y_score: (
+            np.array([0.0, 1.0]),
+            np.array([0.0, 1.0]),
+            np.array([0.5, 0.1]),
+        ),
     )
     monkeypatch.setattr("pysalient.visualisation.visualisation.auc", lambda x, y: 0.8)
     with pytest.raises(RuntimeError, match="could not be created"):
@@ -542,15 +566,20 @@ def test_plot_roc_curve_runtime_error_when_no_ax_and_no_plt(monkeypatch):
 
 
 def test_plot_pr_curve_runtime_error_when_no_ax_and_no_plt(monkeypatch):
-    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
     )
     monkeypatch.setattr("pysalient.visualisation.visualisation.plt", None)
     monkeypatch.setattr(
         "pysalient.visualisation.visualisation.precision_recall_curve",
-        lambda y_true, y_score: (np.array([1.0, 0.5]), np.array([0.0, 1.0]), np.array([0.3])),
+        lambda y_true, y_score: (
+            np.array([1.0, 0.5]),
+            np.array([0.0, 1.0]),
+            np.array([0.3]),
+        ),
     )
     with pytest.raises(RuntimeError, match="could not be created"):
         viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], ax=None)
-

@@ -134,7 +134,9 @@ def test_evaluation_config_accepts_minimal_valid_payload(sample_table):
     assert config.modelid == "model-v1"
     assert config.filter_desc == "all"
     assert config.thresholds.values == [0.5]
-    assert config.confidence_intervals.threshold_ci_method == ThresholdCIMethod.BOOTSTRAP
+    assert (
+        config.confidence_intervals.threshold_ci_method == ThresholdCIMethod.BOOTSTRAP
+    )
 
 
 def test_evaluation_config_rejects_negative_decimal_places(sample_table):

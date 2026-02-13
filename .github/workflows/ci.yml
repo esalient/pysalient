@@ -31,6 +31,8 @@ jobs:
       run: pixi run lint
 
     - name: Run tests with coverage gate
+      env:
+        HYPOTHESIS_PROFILE: ci
       run: pixi run pytest --cov=pysalient --cov-report=term-missing --cov-fail-under=75 tests/
 
     - name: Run tests in all environments (informational)

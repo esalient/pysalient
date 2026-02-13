@@ -28,13 +28,13 @@ def test_parallel_bootstrap_small_deterministic_workload():
     with pytest.MonkeyPatch.context() as m:
         m.setattr("pysalient.evaluation._bootstrap_utils_parallel.Pool", _DummyPool)
         lower, upper = calculate_bootstrap_ci_parallel(
-        y_true=y_true,
-        y_pred=y_pred,
-        metric_func=lambda yt, yp: float(np.mean((yp >= 0.5) == yt)),
-        n_rounds=20,
-        alpha=0.05,
-        seed=7,
-        n_jobs=2,
+            y_true=y_true,
+            y_pred=y_pred,
+            metric_func=lambda yt, yp: float(np.mean((yp >= 0.5) == yt)),
+            n_rounds=20,
+            alpha=0.05,
+            seed=7,
+            n_jobs=2,
         )
     assert 0.0 <= lower <= upper <= 1.0
 

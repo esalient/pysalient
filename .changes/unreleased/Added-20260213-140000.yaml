@@ -1,0 +1,3 @@
+kind: Added
+body: Pandera schemas for test data validation (evaluation input/output, I/O, time-to-event, visualisation)
+time: 2026-02-13T14:00:00+00:00
