@@ -13,6 +13,7 @@ try:
         f1_score,
         precision_recall_curve,
         roc_auc_score,
+        roc_curve,
     )
 except ImportError:
     # Allow the module to be imported, but the function will fail if sklearn is needed.
@@ -21,6 +22,7 @@ except ImportError:
     accuracy_score = None
     f1_score = None
     precision_recall_curve = None
+    roc_curve = None
     auc = None
     warnings.warn(
         "scikit-learn not found. The 'evaluation' function requires scikit-learn "
@@ -81,6 +83,7 @@ def _process_single_evaluation(
     bootstrap_rounds: int = 1000,
     bootstrap_seed: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
+    export_roc_curve_data: bool = False,  # Export ROC/PR curve arrays for visualization
 ) -> list[dict[str, Any]]:  # noqa: C901
     # Define the analytical methods for confidence interval calculations
     analytical_methods = ["normal", "wilson", "agresti-coull"]
@@ -121,10 +124,14 @@ def _process_single_evaluation(
         bootstrap_rounds: Number of bootstrap rounds
         bootstrap_seed: Random seed for reproducibility
         verbosity: Controls logging level in called functions (e.g., bootstrap).
+        export_roc_curve_data: If True, compute and include ROC curve (FPR, TPR, thresholds)
+                               and PR curve (Precision, Recall, thresholds) arrays in the output.
+                               These arrays enable visualization of the full curves. Defaults to False.
 
     Returns:
         List of dictionaries containing evaluation results for each threshold, including
-        time_to_first_alert_value and time_to_first_alert_unit.
+        time_to_first_alert_value and time_to_first_alert_unit. When export_roc_curve_data=True,
+        also includes ROC_FPR, ROC_TPR, ROC_Thresholds, PR_Precision, PR_Recall, PR_Thresholds.
 
     Raises:
         ValueError: If timeseries data is integer or float type but `time_unit` is missing.
@@ -197,14 +204,38 @@ def _process_single_evaluation(
 
     # Initialize overall metrics
 
+    # Initialize curve data variables (for export_roc_curve_data=True)
+    roc_fpr_list, roc_tpr_list, roc_thresholds_list = None, None, None
+    pr_precision_list, pr_recall_list, pr_thresholds_list = None, None, None
+
     # Calculate overall metrics (AUROC/AUPRC)
     try:
         # Calculate overall metrics only if labels contain both classes
         if len(unique_labels) > 1:
             auroc = roc_auc_score(labels, probas)
             # Use same AUPRC calculation as current_process.py for exact match
-            precision, recall, thresholds = precision_recall_curve(labels, probas)
+            precision, recall, pr_thresholds = precision_recall_curve(labels, probas)
             auprc = auc(recall, precision)
+
+            # Compute and store curve data if requested
+            if export_roc_curve_data:
+                # Compute ROC curve points
+                if roc_curve is not None:
+                    roc_fpr, roc_tpr, roc_thresholds = roc_curve(labels, probas)
+                    # Convert to Python lists for PyArrow compatibility
+                    roc_fpr_list = roc_fpr.tolist()
+                    roc_tpr_list = roc_tpr.tolist()
+                    roc_thresholds_list = roc_thresholds.tolist()
+                else:
+                    warnings.warn(
+                        "roc_curve not available from sklearn. ROC curve data will not be exported.",
+                        ImportWarning,
+                    )
+
+                # Store PR curve data (already computed above)
+                pr_precision_list = precision.tolist()
+                pr_recall_list = recall.tolist()
+                pr_thresholds_list = pr_thresholds.tolist()
         else:
             auroc = np.nan
             auprc = np.nan  # Or prevalence if preferred for single class
@@ -926,6 +957,19 @@ def _process_single_evaluation(
                 final_time_to_event_metrics = fillna_time_to_event_metrics
 
             row_data.update(final_time_to_event_metrics)
+
+        # Add ROC/PR curve data if export was requested
+        if export_roc_curve_data:
+            row_data.update(
+                {
+                    "ROC_FPR": roc_fpr_list,
+                    "ROC_TPR": roc_tpr_list,
+                    "ROC_Thresholds": roc_thresholds_list,
+                    "PR_Precision": pr_precision_list,
+                    "PR_Recall": pr_recall_list,
+                    "PR_Thresholds": pr_thresholds_list,
+                }
+            )
 
         # Append row data
         results.append(row_data)

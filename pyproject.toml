@@ -53,6 +53,9 @@ examples = [
   plot = [
       "matplotlib", 
   ]
+  altair = [
+      "altair>=5.0",
+  ]
 
 [project.urls]
 Homepage = "https://github.com/esalient/pysalient"
@@ -93,6 +96,10 @@ ipykernel = "*"
 [tool.pixi.feature.plot.dependencies]
 matplotlib = "*"
 
+[tool.pixi.feature.altair.dependencies]
+# Altair for declarative statistical visualization
+altair = ">=5.0"
+
 [tool.pixi.feature.pandera.dependencies]
 # Pandera for data validation with pandas support
 pandera = "*"
@@ -122,13 +129,14 @@ pandera-polars = "*"
 default = { features = ["dev", "pandera"], solve-group = "default" }
 examples = { features = ["dev", "examples", "pandera"], solve-group = "default" }
 plot = { features = ["dev", "plot", "pandera"], solve-group = "default" }
+altair = { features = ["dev", "altair", "pandera"], solve-group = "default" }
 # Pandera environments with different backends
 pandera-testing = { features = ["dev", "pandera", "pandera-testing"], solve-group = "default" }
 pandera-full = { features = ["dev", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
 pandera-dask = { features = ["dev", "pandera", "pandera-dask"], solve-group = "default" }
 pandera-pyspark = { features = ["dev", "pandera", "pandera-pyspark"], solve-group = "default" }
 pandera-polars = { features = ["dev", "pandera", "pandera-polars"], solve-group = "default" }
-all = { features = ["dev", "examples", "plot", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
+all = { features = ["dev", "examples", "plot", "altair", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
 
 [tool.pixi.tasks]
 test = "pytest --cov=pysalient --cov-report=term-missing --cov-report=html tests/"

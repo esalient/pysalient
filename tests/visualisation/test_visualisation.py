@@ -197,82 +197,171 @@ def test_invalid_float_columns_error(sample_eval_table):
 # --- Tests for Plotting Functions ---
 
 
-# Minimal data for plotting tests
+# Fixture to skip tests if Altair is not available
+needs_altair = pytest.mark.skipif(
+    not viz._ALTAIR_AVAILABLE, reason="altair not installed"
+)
+
+
+# Metadata keys for test fixtures
+_META_KEY_Y_PROBA = "pysalient.io.y_proba_col"
+_META_KEY_Y_LABEL = "pysalient.io.y_label_col"
+
+
 @pytest.fixture
-def sample_plot_data():
-    y_true = np.array([0, 0, 1, 1, 0, 1, 0, 1])
-    y_score = np.array([0.1, 0.3, 0.8, 0.6, 0.2, 0.9, 0.4, 0.7])
-    return y_true, y_score
+def sample_eval_table_with_curves() -> pa.Table:
+    """Provides a sample evaluation result table with ROC/PR curve data."""
+    # Import evaluation to create proper table with curve data
+    from pysalient.evaluation import evaluation
+
+    probas = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]
+    labels = [0, 0, 0, 1, 0, 1, 1, 1]
+
+    table = pa.table({"y_proba": probas, "y_label": labels})
+    metadata = {
+        _META_KEY_Y_PROBA.encode("utf-8"): b"y_proba",
+        _META_KEY_Y_LABEL.encode("utf-8"): b"y_label",
+    }
+    table = table.replace_schema_metadata(metadata)
+
+    # Run evaluation with curve export
+    result = evaluation(
+        table,
+        "test_model",
+        "test_filter",
+        [0.5],
+        export_roc_curve_data=True,
+    )
+    return result
 
 
-# Fixture to potentially skip tests if plotting dependencies are missing
-# Note: This requires matplotlib and sklearn to be installed in the test environment
-# If they are optional, these tests might need to be skipped conditionally.
-# We proceed assuming they are available for testing purposes.
-needs_matplotlib = pytest.mark.skipif(
-    not viz._MATPLOTLIB_AVAILABLE, reason="matplotlib not installed"
-)
-needs_sklearn = pytest.mark.skipif(
-    not viz._SKLEARN_METRICS_AVAILABLE, reason="scikit-learn not installed"
-)
+@pytest.fixture
+def sample_eval_table_without_curves() -> pa.Table:
+    """Provides a sample evaluation result table WITHOUT curve data."""
+    from pysalient.evaluation import evaluation
+
+    probas = [0.1, 0.2, 0.3, 0.4, 0.6, 0.7, 0.8, 0.9]
+    labels = [0, 0, 0, 1, 0, 1, 1, 1]
+
+    table = pa.table({"y_proba": probas, "y_label": labels})
+    metadata = {
+        _META_KEY_Y_PROBA.encode("utf-8"): b"y_proba",
+        _META_KEY_Y_LABEL.encode("utf-8"): b"y_label",
+    }
+    table = table.replace_schema_metadata(metadata)
+
+    # Run evaluation WITHOUT curve export
+    result = evaluation(
+        table,
+        "test_model",
+        "test_filter",
+        [0.5],
+        export_roc_curve_data=False,
+    )
+    return result
 
 
-@needs_matplotlib
-@needs_sklearn
-def test_plot_roc_curve_runs(sample_plot_data):
-    """Test that plot_roc_curve runs without error and returns Axes."""
-    y_true, y_score = sample_plot_data
-    ax = viz.plot_roc_curve(y_true, y_score, model_name="TestModel")
-    assert isinstance(ax, viz.Axes)
-    # Basic check if title is set (more detailed checks are complex)
-    assert ax.get_title() == "Receiver Operating Characteristic (ROC) Curve"
-    # Clean up the plot figure
-    plt = viz.plt  # Get the imported plt
-    if plt:
-        plt.close(ax.figure)
+@needs_altair
+def test_plot_roc_curve_runs(sample_eval_table_with_curves):
+    """Test that plot_roc_curve runs without error."""
+    chart = viz.plot_roc_curve(sample_eval_table_with_curves)
+    # Check it returns something (Altair Chart object)
+    assert chart is not None
+    # Check it has expected properties
+    assert hasattr(chart, "to_dict")  # Altair charts have to_dict method
 
 
-@needs_matplotlib
-@needs_sklearn
-def test_plot_roc_curve_with_existing_ax(sample_plot_data):
-    """Test plot_roc_curve works with a pre-existing Axes object."""
-    y_true, y_score = sample_plot_data
-    plt = viz.plt
-    if not plt:  # Skip if plt is None due to import error guard
-        pytest.skip("matplotlib not available")
-
-    fig, ax_existing = plt.subplots()
-    ax_returned = viz.plot_roc_curve(y_true, y_score, ax=ax_existing)
-    assert ax_returned is ax_existing  # Should return the same axes
-    assert len(ax_existing.lines) > 0  # Check if something was plotted
-    plt.close(fig)
+@needs_altair
+def test_plot_roc_curve_with_threshold(sample_eval_table_with_curves):
+    """Test plot_roc_curve with threshold highlighting."""
+    chart = viz.plot_roc_curve(
+        sample_eval_table_with_curves,
+        threshold=0.5,
+    )
+    assert chart is not None
+    # The chart should contain multiple layers when threshold is specified
+    chart_dict = chart.to_dict()
+    assert "layer" in chart_dict or "mark" in chart_dict
 
 
-@needs_matplotlib
-@needs_sklearn
-def test_plot_pr_curve_runs(sample_plot_data):
-    """Test that plot_precision_recall_curve runs without error and returns Axes."""
-    y_true, y_score = sample_plot_data
-    ax = viz.plot_precision_recall_curve(y_true, y_score, model_name="TestModelPR")
-    assert isinstance(ax, viz.Axes)
-    assert ax.get_title() == "Precision-Recall Curve"
-    # Clean up the plot figure
-    plt = viz.plt
-    if plt:
-        plt.close(ax.figure)
+@needs_altair
+def test_plot_roc_curve_custom_dimensions(sample_eval_table_with_curves):
+    """Test plot_roc_curve with custom width and height."""
+    chart = viz.plot_roc_curve(
+        sample_eval_table_with_curves,
+        width=600,
+        height=500,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert chart_dict.get("width") == 600
+    assert chart_dict.get("height") == 500
 
 
-@needs_matplotlib
-@needs_sklearn
-def test_plot_pr_curve_with_existing_ax(sample_plot_data):
-    """Test plot_precision_recall_curve works with a pre-existing Axes object."""
-    y_true, y_score = sample_plot_data
-    plt = viz.plt
-    if not plt:  # Skip if plt is None due to import error guard
-        pytest.skip("matplotlib not available")
+@needs_altair
+def test_plot_roc_curve_missing_curve_data_error(
+    sample_eval_table_without_curves,
+):
+    """Test plot_roc_curve raises error when curve data is missing."""
+    with pytest.raises(ValueError, match="ROC curve data columns not found"):
+        viz.plot_roc_curve(sample_eval_table_without_curves)
 
-    fig, ax_existing = plt.subplots()
-    ax_returned = viz.plot_precision_recall_curve(y_true, y_score, ax=ax_existing)
-    assert ax_returned is ax_existing
-    assert len(ax_existing.lines) > 0
-    plt.close(fig)
+
+@needs_altair
+def test_plot_pr_curve_runs(sample_eval_table_with_curves):
+    """Test that plot_precision_recall_curve runs without error."""
+    chart = viz.plot_precision_recall_curve(sample_eval_table_with_curves)
+    assert chart is not None
+    assert hasattr(chart, "to_dict")
+
+
+@needs_altair
+def test_plot_pr_curve_with_threshold(sample_eval_table_with_curves):
+    """Test plot_precision_recall_curve with threshold highlighting."""
+    chart = viz.plot_precision_recall_curve(
+        sample_eval_table_with_curves,
+        threshold=0.5,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert "layer" in chart_dict or "mark" in chart_dict
+
+
+@needs_altair
+def test_plot_pr_curve_custom_dimensions(sample_eval_table_with_curves):
+    """Test plot_precision_recall_curve with custom width and height."""
+    chart = viz.plot_precision_recall_curve(
+        sample_eval_table_with_curves,
+        width=500,
+        height=400,
+    )
+    assert chart is not None
+    chart_dict = chart.to_dict()
+    assert chart_dict.get("width") == 500
+    assert chart_dict.get("height") == 400
+
+
+@needs_altair
+def test_plot_pr_curve_missing_curve_data_error(
+    sample_eval_table_without_curves,
+):
+    """Test plot_precision_recall_curve raises error when curve data is missing."""
+    with pytest.raises(ValueError, match="PR curve data columns not found"):
+        viz.plot_precision_recall_curve(sample_eval_table_without_curves)
+
+
+def test_altair_import_error_without_altair():
+    """Test that Altair functions raise ImportError when altair is not available."""
+    # This test checks the error message when altair is not installed
+    # We can't easily test this if altair IS installed, so we'll skip if it is
+    if viz._ALTAIR_AVAILABLE:
+        pytest.skip("Altair is available, cannot test ImportError path")
+
+    # Create a dummy table (won't actually be used since import check happens first)
+    dummy_table = pa.table({"x": [1, 2, 3]})
+
+    with pytest.raises(ImportError, match="altair is required"):
+        viz.plot_roc_curve(dummy_table)
+
+    with pytest.raises(ImportError, match="altair is required"):
+        viz.plot_precision_recall_curve(dummy_table)

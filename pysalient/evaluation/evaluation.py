@@ -88,6 +88,10 @@ def evaluation(
     bootstrap_seed: (
         int | None
     ) = None,  # Used if calculate_au_ci=True OR (calculate_threshold_ci=True and threshold_ci_method='bootstrap')
+    #########################
+    # Curve Export Parameter #
+    #########################
+    export_roc_curve_data: bool = False,  # Export ROC/PR curve arrays for Altair visualization
 ) -> pa.Table:
     """
     Performs evaluation on prediction data across multiple thresholds.
@@ -177,6 +181,10 @@ def evaluation(
                           Used if `calculate_au_ci=True` OR (`calculate_threshold_ci=True` and `threshold_ci_method='bootstrap'`).
         bootstrap_seed: Optional random seed for reproducible bootstrap sampling.
                         Defaults to None. Used if `calculate_au_ci=True` OR (`calculate_threshold_ci=True` and `threshold_ci_method='bootstrap'`).
+        export_roc_curve_data: If True, compute and include ROC curve (FPR, TPR, thresholds)
+                               and PR curve (Precision, Recall, thresholds) arrays in the output.
+                               These arrays enable Altair-based visualization of the full curves.
+                               Defaults to False.
 
     Returns:
         A new PyArrow Table containing the evaluation results, with one row per
@@ -203,6 +211,10 @@ def evaluation(
         Threshold CI columns contain nulls if `calculate_threshold_ci` is False,
         if the method is unsupported for a specific metric (e.g., F1 with analytical methods),
         or if calculation fails.
+        When `export_roc_curve_data=True`, additional list columns are included:
+        'ROC_FPR', 'ROC_TPR', 'ROC_Thresholds' (from sklearn.metrics.roc_curve),
+        'PR_Precision', 'PR_Recall', 'PR_Thresholds' (from sklearn.metrics.precision_recall_curve).
+        These enable plotting full ROC and PR curves using pysalient.visualisation.
 
     Raises:
         ValueError: If required metadata keys are missing, column names from
@@ -623,6 +635,7 @@ def evaluation(
             bootstrap_rounds=bootstrap_rounds,
             bootstrap_seed=bootstrap_seed,
             verbosity=verbosity,  # Pass verbosity down
+            export_roc_curve_data=export_roc_curve_data,  # Pass curve export flag
         )
     except Exception as e:
         # Catch potential errors during the main evaluation process
@@ -694,6 +707,19 @@ def evaluation(
                     pa.field(f"count_first_alerts_after_or_at_{event_key}", pa.int64()),
                 ]
             )
+
+    # Add ROC/PR curve data columns if export requested
+    if export_roc_curve_data:
+        schema_fields.extend(
+            [
+                pa.field("ROC_FPR", pa.list_(pa.float64())),
+                pa.field("ROC_TPR", pa.list_(pa.float64())),
+                pa.field("ROC_Thresholds", pa.list_(pa.float64())),
+                pa.field("PR_Precision", pa.list_(pa.float64())),
+                pa.field("PR_Recall", pa.list_(pa.float64())),
+                pa.field("PR_Thresholds", pa.list_(pa.float64())),
+            ]
+        )
 
     result_schema = pa.schema(schema_fields)
 
