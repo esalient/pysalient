@@ -34,8 +34,9 @@ else:
 # Import internal CI utilities using relative paths
 try:
     # Use relative import within the evaluation module
-    from ._bootstrap_utils import calculate_bootstrap_ci
+    from ._bootstrap_utils import BootstrapCIConfig, calculate_bootstrap_ci
 except ImportError:
+    BootstrapCIConfig = None
     calculate_bootstrap_ci = None  # Will be checked later if needed
 
 try:
@@ -233,20 +234,48 @@ def _process_single_evaluation(
     auprc_lower_ci, auprc_upper_ci = None, None
 
     # Overall CI only uses bootstrap method for now
+    bootstrap_ci_config = None
+    if (
+        calculate_bootstrap_ci is not None
+        and BootstrapCIConfig is not None
+        and (calculate_au_ci or (calculate_threshold_ci and threshold_ci_method == "bootstrap"))
+    ):
+        try:
+            bootstrap_ci_config = BootstrapCIConfig(
+                n_rounds=bootstrap_rounds,
+                alpha=ci_alpha,
+                seed=bootstrap_seed,
+                verbosity=verbosity,
+            )
+        except Exception:
+            bootstrap_ci_config = None
+
+    def _call_bootstrap_ci(metric_func):
+        if bootstrap_ci_config is not None:
+            return calculate_bootstrap_ci(
+                y_true=labels,
+                y_pred=probas,
+                metric_func=metric_func,
+                config=bootstrap_ci_config,
+            )
+        return calculate_bootstrap_ci(
+            y_true=labels,
+            y_pred=probas,
+            metric_func=metric_func,
+            n_rounds=bootstrap_rounds,
+            alpha=ci_alpha,
+            seed=bootstrap_seed,
+            verbosity=verbosity,
+        )
+
     if calculate_au_ci and calculate_bootstrap_ci is not None:
         # Only calculate overall CIs if metrics themselves are defined
         if not np.isnan(auroc) and not np.isnan(auprc):
             try:
                 # Calculate CI for AUROC
-                auroc_lower_ci, auroc_upper_ci = calculate_bootstrap_ci(
-                    y_true=labels,
-                    y_pred=probas,
-                    metric_func=roc_auc_score,  # Pass the function itself
-                    n_rounds=bootstrap_rounds,
-                    alpha=ci_alpha,
-                    seed=bootstrap_seed,
-                    verbosity=verbosity,  # Pass verbosity
-                )
+                auroc_lower_ci, auroc_upper_ci = _call_bootstrap_ci(
+                    roc_auc_score
+                )  # Pass the function itself
 
                 # Calculate CI for AUPRC using same method as point estimate
                 def _auprc_for_bootstrap(y_true_boot, y_pred_boot):
@@ -255,15 +284,9 @@ def _process_single_evaluation(
                     )
                     return auc(recall_boot, precision_boot)
 
-                auprc_lower_ci, auprc_upper_ci = calculate_bootstrap_ci(
-                    y_true=labels,
-                    y_pred=probas,
-                    metric_func=_auprc_for_bootstrap,  # Use same calculation method as point estimate
-                    n_rounds=bootstrap_rounds,
-                    alpha=ci_alpha,
-                    seed=bootstrap_seed,  # Use same seed for consistency if set
-                    verbosity=verbosity,  # Pass verbosity
-                )
+                auprc_lower_ci, auprc_upper_ci = _call_bootstrap_ci(
+                    _auprc_for_bootstrap
+                )  # Use same calculation method as point estimate
 
             except Exception as e:
                 warnings.warn(
@@ -411,15 +434,7 @@ def _process_single_evaluation(
                         upper_key,
                     ) in metric_calculators_bootstrap.items():
                         try:
-                            lower, upper = calculate_bootstrap_ci(
-                                y_true=labels,
-                                y_pred=probas,
-                                metric_func=calc_func,
-                                n_rounds=bootstrap_rounds,
-                                alpha=ci_alpha,
-                                seed=bootstrap_seed,
-                                verbosity=verbosity,  # Pass verbosity
-                            )
+                            lower, upper = _call_bootstrap_ci(calc_func)
                             ci_results[lower_key] = lower
                             ci_results[upper_key] = upper
                         except Exception as e:

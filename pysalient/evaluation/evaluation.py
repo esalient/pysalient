@@ -38,6 +38,7 @@ else:
 # Import internal helpers using absolute paths
 from ._evaluation_process import _process_single_evaluation
 from ._evaluation_utils import _generate_thresholds
+from ._models import EvaluationConfig
 
 # Import CI utilities using absolute paths
 try:
@@ -61,12 +62,48 @@ META_KEY_AGGREGATION_COLS = "pysalient.io.aggregation_cols"
 META_KEY_TIMESERIES_COL = "pysalient.io.timeseries_col"
 
 
+def _evaluation_impl(config: EvaluationConfig) -> pa.Table:
+    """Internal config-first implementation entrypoint."""
+    return evaluation(
+        data=config.data,
+        modelid=config.modelid,
+        filter_desc=config.filter_desc,
+        thresholds=config.thresholds.values,
+        time_to_event_cols=(
+            config.time_to_event.event_columns if config.time_to_event is not None else None
+        ),
+        aggregation_func=(
+            config.time_to_event.aggregation_func
+            if config.time_to_event is not None
+            else "median"
+        ),
+        time_unit=(
+            config.time_to_event.time_unit.value
+            if config.time_to_event is not None
+            else "hour"
+        ),
+        time_to_event_fillna=(
+            config.time_to_event.fillna if config.time_to_event is not None else None
+        ),
+        force_threshold_zero=config.thresholds.force_threshold_zero,
+        decimal_places=config.decimal_places,
+        verbosity=config.verbosity,
+        force_eval=config.force_eval,
+        calculate_au_ci=config.confidence_intervals.calculate_au_ci,
+        calculate_threshold_ci=config.confidence_intervals.calculate_threshold_ci,
+        threshold_ci_method=config.confidence_intervals.threshold_ci_method.value,
+        ci_alpha=config.confidence_intervals.alpha,
+        bootstrap_rounds=config.confidence_intervals.bootstrap_rounds,
+        bootstrap_seed=config.confidence_intervals.bootstrap_seed,
+    )
+
+
 # This is the public API function
 def evaluation(
-    data: pa.Table,
-    modelid: str,
-    filter_desc: str,
-    thresholds: list[float] | tuple[float, ...] | tuple[float, float, float],
+    data: pa.Table | EvaluationConfig,
+    modelid: str | None = None,
+    filter_desc: str | None = None,
+    thresholds: list[float] | tuple[float, ...] | tuple[float, float, float] | None = None,
     time_to_event_cols: dict[str, str]
     | None = None,  # NEW: Clinical event columns for time-to-event metrics
     aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
@@ -217,6 +254,9 @@ def evaluation(
         KeyError: If required metadata keys (e.g., META_KEY_Y_PROBA) are missing.
         RuntimeError: If metric calculation or CI calculation fails unexpectedly.
     """
+    if isinstance(data, EvaluationConfig):
+        return _evaluation_impl(data)
+
     ######################################
     # 1. Validate Inputs & Read Metadata #
     ######################################
@@ -226,6 +266,8 @@ def evaluation(
         raise TypeError("Input 'modelid' must be a string.")
     if not isinstance(filter_desc, str):
         raise TypeError("Input 'filter_desc' must be a string.")
+    if thresholds is None:
+        raise TypeError("Input 'thresholds' must be a list or tuple of floats.")
     if decimal_places is not None:
         if not isinstance(decimal_places, int) or decimal_places < 0:
             raise ValueError(
@@ -264,7 +306,9 @@ def evaluation(
             raise TypeError("Input 'time_to_event_fillna' must be a number or None.")
 
     # Validate that aggregation_func is a valid NumPy function
-    if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
+    if (
+        not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func))
+    ):
         raise ValueError(
             f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function."
         )
@@ -340,9 +384,7 @@ def evaluation(
                 "Please increase bootstrap_rounds to at least 100."
             )
         # Wrap warning in verbosity check
-        if verbosity <= 0:
-            # Consider using logging.info here if a logger is configured
-            pass  # For now, no INFO equivalent for this warning
+        if verbosity <= 0 and bootstrap_rounds < 500:
             warnings.warn(
                 f"bootstrap_rounds is set to {bootstrap_rounds}. A value less than 500 "
                 "may lead to less reliable confidence interval estimates. Consider increasing "

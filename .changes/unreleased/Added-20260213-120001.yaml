@@ -1,0 +1,3 @@
+kind: Added
+body: Config-first internal entrypoint `_evaluation_impl` to separate config-based and parameter-based evaluation paths
+time: 2026-02-13T12:00:01+00:00

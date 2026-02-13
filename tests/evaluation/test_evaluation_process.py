@@ -385,6 +385,40 @@ class TestProcessSingleEvaluationConfidenceIntervals:
                 assert result["PPV_Upper_CI"] is None
                 assert not mock_bootstrap.called
 
+    def test_bootstrap_calls_pass_config_object(self, larger_test_data):
+        """Bootstrap CI calls should pass BootstrapCIConfig through the config kwarg."""
+        probas, labels = larger_test_data
+
+        with patch(
+            "pysalient.evaluation._evaluation_process.calculate_bootstrap_ci"
+        ) as mock_bootstrap:
+            mock_bootstrap.return_value = (0.6, 0.8)
+
+            _process_single_evaluation(
+                probas=probas,
+                labels=labels,
+                modelid="test_model",
+                filter_desc="test_filter",
+                threshold_list=[0.5],
+                timeseries_array=None,
+                timeseries_pa_type=None,
+                time_unit=None,
+                calculate_au_ci=True,
+                bootstrap_rounds=123,
+                bootstrap_seed=42,
+                ci_alpha=0.07,
+                verbosity=-1,
+            )
+
+            assert mock_bootstrap.call_count == 2
+            for call in mock_bootstrap.call_args_list:
+                config = call.kwargs.get("config")
+                assert config is not None
+                assert config.n_rounds == 123
+                assert config.seed == 42
+                assert config.alpha == 0.07
+                assert config.verbosity == -1
+
     @pytest.mark.parametrize("analytical_method", ["normal", "wilson", "agresti-coull"])
     def test_threshold_ci_analytical(self, larger_test_data, analytical_method):
         """Test threshold CI calculation with analytical methods."""

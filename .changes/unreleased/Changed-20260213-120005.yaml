@@ -1,0 +1,3 @@
+kind: Changed
+body: Simplify `evaluation()` by extracting EvaluationConfig dispatch and removing redundant `input_is_config` guards
+time: 2026-02-13T12:00:05+00:00

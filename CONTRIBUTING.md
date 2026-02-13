@@ -46,7 +46,7 @@ pixi run lint
 
 #### Available environments
 
-- `default` - Core development tools (pytest, ruff, mypy, sphinx)
+- `default` - Core development tools (pytest, ruff, ty, sphinx)
 - `examples` - Development tools + Jupyter (for running notebooks)
 - `plot` - Development tools + matplotlib
 - `all` - All features combined
@@ -64,7 +64,7 @@ pixi shell -e all       # For everything
 
 - [pytest](https://docs.pytest.org/en/latest/) to define, discover, and run tests
 - [ruff](https://docs.astral.sh/ruff/) for code linting and formatting
-- [mypy](https://mypy.readthedocs.io/en/stable/) for static type checking
+- [ty](https://docs.astral.sh/ty/) for static type checking
 - [pre-commit](https://pre-commit.com/) to easily run checks
 - [changie](https://changie.dev/) to create Changelog entries, without merge conflicts
 - [GitHub actions](https://github.com/features/actions) for the CI/CD and push to [PyPi](https://pypi.org/).
