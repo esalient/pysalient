@@ -1,5 +1,4 @@
-import os  # For path manipulation
-
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.csv as pv
@@ -112,32 +111,38 @@ def dataframe_with_invalid_timeseries(sample_data_dict):
     return pd.DataFrame(data)
 
 
-###############################
-# Fixtures for Realistic Data #
-###############################
-
-# Define the base directory for tests and the data subdirectory
-TESTS_DIR = os.path.dirname(__file__)
-DATA_DIR = os.path.join(TESTS_DIR, "data")
-
-
 @pytest.fixture(scope="module")
-def realistic_parquet_path():
-    """Provides the path to a small, anonymized, realistic parquet file."""
-    path = os.path.join(
-        DATA_DIR, "anonymised_sample.parquet"
-    )  # Use Australian English spelling
-    if not os.path.exists(path):
-        # Skip test if the anonymized data file hasn't been created yet
-        pytest.skip(f"Realistic anonymized data file not found at: {path}")
-    return path
+def realistic_generated_parquet_path(tmp_path_factory):
+    """Generate realistic data and persist as a parquet file for IO tests."""
+    rng = np.random.default_rng(42)
+    n_rows = 500
+    n_encounters = 140
 
+    encounter_ids = rng.integers(1, n_encounters + 1, size=n_rows)
+    event_offsets = rng.integers(0, 30 * 24 * 60, size=n_rows)
+    event_timestamps = pd.Timestamp("2024-01-01") + pd.to_timedelta(
+        event_offsets, unit="m"
+    )
 
-@pytest.fixture(scope="module")
-def realistic_table(realistic_parquet_path):
-    """Provides a pre-loaded Arrow Table from the realistic data file."""
-    # This fixture assumes the file exists due to the skip in realistic_parquet_path
-    return pq.read_table(realistic_parquet_path)
+    probabilities = rng.random(size=n_rows)
+    labels = (probabilities > (0.25 + 0.5 * rng.random(size=n_rows))).astype(int)
+    models = np.where(probabilities > 0.5, "model_a", "model_b")
+    tasks = np.where(encounter_ids % 2 == 0, "task_x", "task_y")
+
+    df = pd.DataFrame(
+        {
+            "encounter_id": encounter_ids,
+            "event_timestamp": event_timestamps,
+            "prediction_probability": probabilities,
+            "true_label": labels,
+            "model_identifier": models,
+            "task_identifier": tasks,
+        }
+    )
+
+    path = tmp_path_factory.mktemp("generated_test_data") / "generated_sample.parquet"
+    df.to_parquet(path, index=False)
+    return str(path)
 
 
 ########################
@@ -384,10 +389,9 @@ def test_assign_model_name_column_exists_error(sample_dataframe, base_load_args)
 #############################
 
 
-def test_load_from_realistic_parquet(realistic_parquet_path, base_load_args):
+def test_load_from_realistic_parquet(realistic_generated_parquet_path, base_load_args):
     """
-    Tests loading from the anonymized, realistic Parquet file.
-    Note: This test will be skipped if tests/data/anonymized_sample.parquet does not exist.
+    Tests loading from a generated, realistic Parquet file.
     """
     # IMPORTANT: Adjust base_load_args if column names differ in the realistic file!
     # Example:
@@ -402,7 +406,9 @@ def test_load_from_realistic_parquet(realistic_parquet_path, base_load_args):
     # Using base_load_args directly assumes column names match the synthetic data
     realistic_args = base_load_args
 
-    table = load_evaluation_data(source=realistic_parquet_path, **realistic_args)
+    table = load_evaluation_data(
+        source=realistic_generated_parquet_path, **realistic_args
+    )
     assert isinstance(table, pa.Table)
     assert table.num_rows > 0  # Check it's not empty
     expected_cols = set(realistic_args.values())

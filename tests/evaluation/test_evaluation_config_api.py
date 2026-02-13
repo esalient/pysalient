@@ -28,7 +28,9 @@ pytestmark = [
     ),
     pytest.mark.filterwarnings("ignore:Only one class is present in y_true"),
     pytest.mark.filterwarnings("ignore:No positive class found in y_true"),
-    pytest.mark.filterwarnings("ignore:Bootstrap CI calculation failed.*seed must be an integer or None"),
+    pytest.mark.filterwarnings(
+        "ignore:Bootstrap CI calculation failed.*seed must be an integer or None"
+    ),
 ]
 
 

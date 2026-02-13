@@ -238,7 +238,10 @@ def _process_single_evaluation(
     if (
         calculate_bootstrap_ci is not None
         and BootstrapCIConfig is not None
-        and (calculate_au_ci or (calculate_threshold_ci and threshold_ci_method == "bootstrap"))
+        and (
+            calculate_au_ci
+            or (calculate_threshold_ci and threshold_ci_method == "bootstrap")
+        )
     ):
         try:
             bootstrap_ci_config = BootstrapCIConfig(

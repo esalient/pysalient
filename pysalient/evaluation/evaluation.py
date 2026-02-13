@@ -70,7 +70,9 @@ def _evaluation_impl(config: EvaluationConfig) -> pa.Table:
         filter_desc=config.filter_desc,
         thresholds=config.thresholds.values,
         time_to_event_cols=(
-            config.time_to_event.event_columns if config.time_to_event is not None else None
+            config.time_to_event.event_columns
+            if config.time_to_event is not None
+            else None
         ),
         aggregation_func=(
             config.time_to_event.aggregation_func
@@ -103,7 +105,10 @@ def evaluation(
     data: pa.Table | EvaluationConfig,
     modelid: str | None = None,
     filter_desc: str | None = None,
-    thresholds: list[float] | tuple[float, ...] | tuple[float, float, float] | None = None,
+    thresholds: list[float]
+    | tuple[float, ...]
+    | tuple[float, float, float]
+    | None = None,
     time_to_event_cols: dict[str, str]
     | None = None,  # NEW: Clinical event columns for time-to-event metrics
     aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
@@ -306,9 +311,7 @@ def evaluation(
             raise TypeError("Input 'time_to_event_fillna' must be a number or None.")
 
     # Validate that aggregation_func is a valid NumPy function
-    if (
-        not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func))
-    ):
+    if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
         raise ValueError(
             f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function."
         )
