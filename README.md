@@ -4,7 +4,7 @@
 <div align="center">
 <img alt="python" src="https://img.shields.io/badge/license-%20%20GNU%20GPLv3%20-green?style=for-the-badge"></a>
 <img alt="python" src="https://img.shields.io/badge/python-3.11-blue?style=for-the-badge"></a>
-<a href="https://github.com/astral-sh/ruff" rel="nofollow noreferrer noopener" target="_blank"><img alt="Linting: Ruff" src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json"></a>
+<a href="https://github.com/astral-sh/ruff" rel="nofollow noreferrer noopener" target="_blank"><img alt="Linting: Ruff" src="https://img.shields.io/badge/Ruff-D7FF64?style=for-the-badge&label=Linting&logo=ruff&logoColor=black"></a>
 
 Python implementation of the SALIENT framework to 
 assist with clinical AI research and implementation.
