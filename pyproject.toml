@@ -36,7 +36,6 @@ dev = [
     "mypy",
     "myst-parser",
     "pytest",
-    "pytest-cov", 
     "ruff",
     "sphinx",
     "pandas",
@@ -78,7 +77,6 @@ scikit-learn = "*"
 [tool.pixi.feature.dev.dependencies]
 # Development tools from conda
 pytest = "*"
-pytest-cov = "*"
 ruff = "*"
 mypy = "*"
 sphinx = "*"
@@ -131,7 +129,7 @@ pandera-polars = { features = ["dev", "pandera", "pandera-polars"], solve-group 
 all = { features = ["dev", "examples", "plot", "pandera", "pandera-testing", "pandera-io"], solve-group = "default" }
 
 [tool.pixi.tasks]
-test = "pytest --cov=pysalient --cov-report=term-missing --cov-report=html tests/"
+test = "pytest tests/"
 lint = "ruff check . --fix"
 format = "ruff format ."
 typecheck = "mypy pysalient"
@@ -188,13 +186,7 @@ line-ending = "auto"
 # The format options above apply to the Python code within notebooks.
 
 [tool.pytest.ini_options]
-# Specify which plugins to use
-addopts = [
-    "--cov=pysalient",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "-v"
-]
+addopts = ["-v"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
