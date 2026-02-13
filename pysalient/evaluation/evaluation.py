@@ -38,6 +38,7 @@ else:
 # Import internal helpers using absolute paths
 from ._evaluation_process import _process_single_evaluation
 from ._evaluation_utils import _generate_thresholds
+from ._models import EvaluationConfig
 
 # Import CI utilities using absolute paths
 try:
@@ -63,10 +64,10 @@ META_KEY_TIMESERIES_COL = "pysalient.io.timeseries_col"
 
 # This is the public API function
 def evaluation(
-    data: pa.Table,
-    modelid: str,
-    filter_desc: str,
-    thresholds: list[float] | tuple[float, ...] | tuple[float, float, float],
+    data: pa.Table | EvaluationConfig,
+    modelid: str | None = None,
+    filter_desc: str | None = None,
+    thresholds: list[float] | tuple[float, ...] | tuple[float, float, float] | None = None,
     time_to_event_cols: dict[str, str]
     | None = None,  # NEW: Clinical event columns for time-to-event metrics
     aggregation_func: str = "median",  # NEW: Aggregation function for time-to-event metrics
@@ -217,6 +218,33 @@ def evaluation(
         KeyError: If required metadata keys (e.g., META_KEY_Y_PROBA) are missing.
         RuntimeError: If metric calculation or CI calculation fails unexpectedly.
     """
+    input_is_config = isinstance(data, EvaluationConfig)
+    if input_is_config:
+        config = data
+        data = config.data
+        modelid = config.modelid
+        filter_desc = config.filter_desc
+        thresholds = config.thresholds.values
+        force_threshold_zero = config.thresholds.force_threshold_zero
+
+        if config.time_to_event is not None:
+            time_to_event_cols = config.time_to_event.event_columns
+            aggregation_func = config.time_to_event.aggregation_func
+            time_unit = config.time_to_event.time_unit.value
+            time_to_event_fillna = config.time_to_event.fillna
+        else:
+            time_to_event_cols = None
+
+        calculate_au_ci = config.confidence_intervals.calculate_au_ci
+        calculate_threshold_ci = config.confidence_intervals.calculate_threshold_ci
+        threshold_ci_method = config.confidence_intervals.threshold_ci_method.value
+        ci_alpha = config.confidence_intervals.alpha
+        bootstrap_rounds = config.confidence_intervals.bootstrap_rounds
+        bootstrap_seed = config.confidence_intervals.bootstrap_seed
+        decimal_places = config.decimal_places
+        verbosity = config.verbosity
+        force_eval = config.force_eval
+
     ######################################
     # 1. Validate Inputs & Read Metadata #
     ######################################
@@ -226,17 +254,19 @@ def evaluation(
         raise TypeError("Input 'modelid' must be a string.")
     if not isinstance(filter_desc, str):
         raise TypeError("Input 'filter_desc' must be a string.")
-    if decimal_places is not None:
+    if thresholds is None:
+        raise TypeError("Input 'thresholds' must be a list or tuple of floats.")
+    if not input_is_config and decimal_places is not None:
         if not isinstance(decimal_places, int) or decimal_places < 0:
             raise ValueError(
                 "Input 'decimal_places' must be a non-negative integer or None."
             )
     # Add type check for calculate_threshold_ci
-    if not isinstance(calculate_threshold_ci, bool):
+    if not input_is_config and not isinstance(calculate_threshold_ci, bool):
         raise TypeError("Input 'calculate_threshold_ci' must be a boolean.")
 
     # Validate new time-to-event parameters
-    if time_to_event_cols is not None:
+    if not input_is_config and time_to_event_cols is not None:
         if not isinstance(time_to_event_cols, dict):
             raise TypeError("Input 'time_to_event_cols' must be a dictionary or None.")
         if not time_to_event_cols:  # Check for empty dict
@@ -253,24 +283,26 @@ def evaluation(
                     "All keys and values in 'time_to_event_cols' must be non-empty strings."
                 )
 
-    if not isinstance(aggregation_func, str):
+    if not input_is_config and not isinstance(aggregation_func, str):
         raise TypeError("Input 'aggregation_func' must be a string.")
-    if not aggregation_func:
+    if not input_is_config and not aggregation_func:
         raise ValueError("Input 'aggregation_func' cannot be an empty string.")
 
     # Validate time_to_event_fillna parameter
-    if time_to_event_fillna is not None:
+    if not input_is_config and time_to_event_fillna is not None:
         if not isinstance(time_to_event_fillna, int | float):
             raise TypeError("Input 'time_to_event_fillna' must be a number or None.")
 
     # Validate that aggregation_func is a valid NumPy function
-    if not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func)):
+    if not input_is_config and (
+        not hasattr(np, aggregation_func) or not callable(getattr(np, aggregation_func))
+    ):
         raise ValueError(
             f"Input 'aggregation_func' ('{aggregation_func}') is not a valid NumPy aggregation function."
         )
 
     # Validate time_unit if provided
-    if not isinstance(time_unit, str) or not time_unit:
+    if not input_is_config and (not isinstance(time_unit, str) or not time_unit):
         raise TypeError("Input 'time_unit' must be a non-empty string.")
 
     # Define supported time units for validation
@@ -298,7 +330,7 @@ def evaluation(
         "w",
     }
 
-    if time_unit.lower() not in supported_time_units:
+    if not input_is_config and time_unit.lower() not in supported_time_units:
         raise ValueError(
             f"Unsupported time_unit '{time_unit}'. "
             f"Supported units: {sorted(supported_time_units)}"

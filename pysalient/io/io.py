@@ -13,15 +13,16 @@ from ._io_core import (
     _load_data_to_pyarrow,
     _perform_aggregation,
 )
+from ._models import LoadConfig
 from ._io_utils import _attach_metadata, _validate_columns
 
 
 def load_evaluation_data(
-    source: str | pd.DataFrame,
-    y_proba_col: str,
-    y_label_col: str,
-    aggregation_cols: str | list[str],
-    timeseries_col: str,
+    source: str | pd.DataFrame | LoadConfig,
+    y_proba_col: str | None = None,
+    y_label_col: str | None = None,
+    aggregation_cols: str | list[str] | None = None,
+    timeseries_col: str | None = None,
     model_col: str | None = None,
     task_col: str | None = None,
     assign_task_name: str | None = None,
@@ -91,6 +92,30 @@ def load_evaluation_data(
                     already exists.
         TypeError: If the source type is unsupported or cannot be inferred.
     """
+    if isinstance(source, LoadConfig):
+        config = source
+        source = config.source
+        y_proba_col = config.columns.y_proba_col
+        y_label_col = config.columns.y_label_col
+        aggregation_cols = config.columns.aggregation_cols
+        timeseries_col = config.columns.timeseries_col
+        model_col = config.columns.model_col
+        task_col = config.columns.task_col
+        assign_task_name = config.assign_task_name
+        assign_model_name = config.assign_model_name
+        source_type = config.source_type
+        read_options = config.read_options
+        kwargs.setdefault("perform_aggregation", config.perform_aggregation)
+        kwargs.setdefault("proba_agg_func", config.proba_agg_func)
+        kwargs.setdefault("label_agg_func", config.label_agg_func)
+
+    if y_proba_col is None or y_label_col is None or timeseries_col is None:
+        raise TypeError(
+            "Inputs 'y_proba_col', 'y_label_col', and 'timeseries_col' are required."
+        )
+    if aggregation_cols is None:
+        raise TypeError("Input 'aggregation_cols' is required.")
+
     table: pa.Table = None
     # resolved_source_type = source_type # Handled internally now
 

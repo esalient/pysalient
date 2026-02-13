@@ -4,6 +4,7 @@ Tests for the _bootstrap_utils module.
 
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 # Assume sklearn is available for testing purposes, or mock if necessary
 try:
@@ -24,7 +25,10 @@ except ImportError:
 # Import the function to test - catch potential import errors
 try:
     # Import from the new internal location
-    from pysalient.evaluation._bootstrap_utils import calculate_bootstrap_ci
+    from pysalient.evaluation._bootstrap_utils import (
+        BootstrapCIConfig,
+        calculate_bootstrap_ci,
+    )
 except ImportError:
     pytest.skip(
         "Skipping bootstrap tests: _internal._bootstrap_utils not found",
@@ -127,6 +131,57 @@ def test_different_alpha_values(sample_data):
     # The intervals should generally be different, but allow for edge cases
     # where they might be the same if data/sampling leads to it.
     # The primary check is that 99% CI is wider or equal.
+
+
+def test_config_object_path_matches_legacy(sample_data):
+    """Test config-based API produces deterministic results like legacy API."""
+    y_true, y_pred = sample_data
+    metric = roc_auc_score if SKLEARN_AVAILABLE else lambda yt, yp: np.mean(yt)
+
+    legacy_ci = calculate_bootstrap_ci(
+        y_true, y_pred, metric, n_rounds=N_ROUNDS, alpha=0.05, seed=SEED
+    )
+    config_ci = calculate_bootstrap_ci(
+        y_true,
+        y_pred,
+        metric,
+        config=BootstrapCIConfig(n_rounds=N_ROUNDS, alpha=0.05, seed=SEED),
+    )
+
+    assert config_ci == legacy_ci
+
+
+def test_config_precedence_over_legacy_params(sample_data):
+    """Test config values take precedence when both config and legacy params are passed."""
+    y_true, y_pred = sample_data
+    metric = roc_auc_score if SKLEARN_AVAILABLE else lambda yt, yp: np.mean(yt)
+
+    ci_with_config = calculate_bootstrap_ci(
+        y_true,
+        y_pred,
+        metric,
+        n_rounds=1,
+        alpha=0.5,
+        seed=999,
+        config=BootstrapCIConfig(n_rounds=N_ROUNDS, alpha=0.05, seed=SEED),
+    )
+    ci_config_only = calculate_bootstrap_ci(
+        y_true,
+        y_pred,
+        metric,
+        config=BootstrapCIConfig(n_rounds=N_ROUNDS, alpha=0.05, seed=SEED),
+    )
+
+    assert ci_with_config == ci_config_only
+
+
+def test_bootstrap_ci_config_validation_error():
+    """Test pydantic validation for invalid BootstrapCIConfig fields."""
+    with pytest.raises(ValidationError):
+        BootstrapCIConfig(n_rounds=0)
+
+    with pytest.raises(ValidationError):
+        BootstrapCIConfig(alpha=1.0)
 
 
 ##########################

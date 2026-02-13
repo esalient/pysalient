@@ -6,6 +6,9 @@ import logging
 from collections.abc import Callable
 
 import numpy as np
+from pydantic import Field
+
+from pysalient._shared_models import BaseConfig
 
 # Configure logging - Get logger, but don't configure basicConfig here
 # Configuration should happen at the application level
@@ -20,6 +23,15 @@ except ImportError:
     average_precision_score = None
 
 
+class BootstrapCIConfig(BaseConfig):
+    """Validated configuration for bootstrap confidence interval calculation."""
+
+    n_rounds: int = Field(default=1000, gt=0)
+    alpha: float = Field(default=0.05, gt=0, lt=1)
+    seed: int | None = None
+    verbosity: int = 0
+
+
 def calculate_bootstrap_ci(
     y_true: np.ndarray,
     y_pred: np.ndarray,
@@ -28,6 +40,7 @@ def calculate_bootstrap_ci(
     alpha: float = 0.05,
     seed: int | None = None,
     verbosity: int = 0,  # Add verbosity parameter
+    config: BootstrapCIConfig | None = None,
 ) -> tuple[float, float]:
     """
     Calculates bootstrap confidence intervals for a given metric function.
@@ -48,6 +61,8 @@ def calculate_bootstrap_ci(
                Must be in the range (0, 1).
         seed: Optional random seed for reproducibility of bootstrap sampling.
         verbosity: Controls logging level: <= -1 (INFO+), 0 (WARN+), >= 1 (ERROR only).
+        config: Optional validated config object. When provided, this takes
+                precedence over ``n_rounds``, ``alpha``, ``seed``, and ``verbosity``.
 
     Returns:
         A tuple containing the lower and upper bounds of the confidence interval.
@@ -58,6 +73,12 @@ def calculate_bootstrap_ci(
         TypeError: If inputs are not NumPy arrays or metric_func is not callable.
         Exception: Propagates exceptions raised by the metric_func during calculation.
     """
+    if config is not None:
+        n_rounds = config.n_rounds
+        alpha = config.alpha
+        seed = config.seed
+        verbosity = config.verbosity
+
     ####################
     # Input Validation #
     ####################
