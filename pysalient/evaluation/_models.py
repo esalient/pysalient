@@ -2,6 +2,7 @@
 Pydantic models for evaluation configuration.
 """
 
+import warnings
 from enum import Enum
 
 import numpy as np
@@ -92,6 +93,17 @@ class ConfidenceIntervalConfig(BaseConfig):
 
     @model_validator(mode="after")
     def validate_bootstrap_rounds_when_bootstrap_used(self) -> "ConfidenceIntervalConfig":
+        supported_threshold_ci_methods = {
+            ThresholdCIMethod.BOOTSTRAP,
+            ThresholdCIMethod.NORMAL,
+            ThresholdCIMethod.WILSON,
+            ThresholdCIMethod.AGRESTI_COULL,
+        }
+        if self.threshold_ci_method not in supported_threshold_ci_methods:
+            raise ValueError(
+                "threshold_ci_method must be one of: bootstrap, normal, wilson, agresti-coull."
+            )
+
         ci_enabled = self.calculate_au_ci or self.calculate_threshold_ci
         if ci_enabled and not (0 < self.alpha < 1):
             raise ValueError("alpha must be between 0 and 1 when CI is enabled.")
@@ -110,6 +122,12 @@ class ConfidenceIntervalConfig(BaseConfig):
         if bootstrap_required and self.bootstrap_rounds < 100:
             raise ValueError(
                 "bootstrap_rounds must be >= 100 when bootstrap CI is enabled."
+            )
+        if bootstrap_required and self.bootstrap_rounds < 500:
+            warnings.warn(
+                "bootstrap_rounds < 500 may lead to less stable confidence intervals; "
+                "consider >= 1000 for production runs.",
+                UserWarning,
             )
         return self
 

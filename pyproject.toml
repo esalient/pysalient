@@ -199,3 +199,11 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+filterwarnings = [
+    "ignore:\\[Errno 13\\] Permission denied\\.\\s+joblib will operate in serial mode:UserWarning",
+    "ignore:Only one class is present in y_true\\. ROC AUC score is not defined in that case\\.:UserWarning",
+    "ignore:No positive class found in y_true, recall is set to one for all thresholds\\.:UserWarning",
+    "ignore:Only one class present in labels\\. AUROC and AUPRC are undefined\\.:UserWarning",
+    "ignore:bootstrap_rounds is set to .* less reliable confidence interval estimates\\.:UserWarning",
+    "ignore:100\\.0% of bootstrap rounds failed metric calculation for _calculate_npv_boot\\..*:RuntimeWarning",
+]

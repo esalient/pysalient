@@ -4,6 +4,7 @@ Tests for config-based evaluation API compatibility.
 
 import numpy as np
 import pyarrow as pa
+import pytest
 
 from pysalient.evaluation import evaluation
 from pysalient.evaluation._models import (
@@ -17,6 +18,18 @@ META_KEY_Y_PROBA = "pysalient.io.y_proba_col"
 META_KEY_Y_LABEL = "pysalient.io.y_label_col"
 SYNTH_PROBA_COL = "synth_probas"
 SYNTH_LABEL_COL = "synth_labels"
+
+pytestmark = [
+    pytest.mark.filterwarnings(
+        "ignore:bootstrap_rounds < 500 may lead to less stable confidence intervals"
+    ),
+    pytest.mark.filterwarnings(
+        "ignore:bootstrap_rounds is set to .* less reliable confidence interval estimates"
+    ),
+    pytest.mark.filterwarnings("ignore:Only one class is present in y_true"),
+    pytest.mark.filterwarnings("ignore:No positive class found in y_true"),
+    pytest.mark.filterwarnings("ignore:Bootstrap CI calculation failed.*seed must be an integer or None"),
+]
 
 
 def _build_table_with_metadata() -> pa.Table:

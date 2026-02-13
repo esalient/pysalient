@@ -13,8 +13,8 @@ from ._io_core import (
     _load_data_to_pyarrow,
     _perform_aggregation,
 )
-from ._models import LoadConfig
 from ._io_utils import _attach_metadata, _validate_columns
+from ._models import LoadConfig
 
 
 def load_evaluation_data(

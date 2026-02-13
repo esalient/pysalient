@@ -276,3 +276,281 @@ def test_plot_pr_curve_with_existing_ax(sample_plot_data):
     assert ax_returned is ax_existing
     assert len(ax_existing.lines) > 0
     plt.close(fig)
+
+
+def test_order_by_valid_string():
+    table = pa.table({"threshold": [0.9, 0.1], "AUROC": [0.8, 0.7]})
+    html = viz.format_evaluation_table(table, order_by="threshold").to_html()
+    assert html.find(">0.100<") < html.find(">0.900<")
+
+
+def test_order_by_valid_list():
+    table = pa.table(
+        {
+            "modelid": ["b", "a", "a"],
+            "threshold": [0.7, 0.9, 0.1],
+            "AUROC": [0.7, 0.9, 0.1],
+        }
+    )
+    html = viz.format_evaluation_table(
+        table, order_by=["modelid", "threshold"], decimal_places=1
+    ).to_html()
+    assert html.find(">a<") < html.find(">b<")
+    assert html.find(">0.1<") < html.find(">0.9<")
+
+
+def test_order_by_missing_column_raises(sample_eval_table):
+    with pytest.raises(RuntimeError, match="Failed to sort"):
+        viz.format_evaluation_table(sample_eval_table, order_by="missing_col")
+
+
+def test_order_by_invalid_type_raises(sample_eval_table):
+    with pytest.raises(RuntimeError, match="Failed to sort"):
+        viz.format_evaluation_table(sample_eval_table, order_by=123)
+
+
+def test_ci_column_true_creates_separate_columns():
+    table = pa.table(
+        {
+            "threshold": [0.5],
+            "AUROC": [0.85],
+            "AUROC_Lower_CI": [0.82],
+            "AUROC_Upper_CI": [0.88],
+        }
+    )
+    html = viz.format_evaluation_table(table, ci_column=True).to_html()
+    assert "AUROC CI" in html
+    assert "AUROC_Lower_CI" not in html
+    assert "AUROC_Upper_CI" not in html
+
+
+def test_ci_column_false_inlines_ci_text():
+    table = pa.table(
+        {
+            "threshold": [0.5],
+            "AUROC": [0.85],
+            "AUROC_Lower_CI": [0.82],
+            "AUROC_Upper_CI": [0.88],
+        }
+    )
+    html = viz.format_evaluation_table(table, ci_column=False).to_html()
+    assert "AUROC CI" not in html
+    assert "0.850 [0.820 - 0.880]" in html
+
+
+def test_float_columns_validation_and_filtering(sample_eval_table):
+    with pytest.raises(TypeError, match="float_columns"):
+        viz.format_evaluation_table(sample_eval_table, float_columns=[1, "AUROC"])
+
+    html = viz.format_evaluation_table(
+        sample_eval_table, float_columns=["AUROC", "missing"], decimal_places=4
+    ).to_html()
+    assert ">0.9877<" in html
+    assert ">0.1000<" not in html
+
+
+@needs_matplotlib
+@needs_sklearn
+def test_plot_roc_curve_without_axes(sample_plot_data):
+    y_true, y_score = sample_plot_data
+    ax = viz.plot_roc_curve(y_true, y_score)
+    assert isinstance(ax, viz.Axes)
+    viz.plt.close(ax.figure)
+
+
+@needs_matplotlib
+@needs_sklearn
+def test_plot_roc_curve_label_with_model_name(sample_plot_data):
+    y_true, y_score = sample_plot_data
+    ax = viz.plot_roc_curve(y_true, y_score, model_name="ModelX")
+    labels = [line.get_label() for line in ax.lines]
+    assert any("ModelX (AUC =" in label for label in labels)
+    viz.plt.close(ax.figure)
+
+
+@needs_matplotlib
+@needs_sklearn
+def test_plot_roc_curve_label_without_model_name(sample_plot_data):
+    y_true, y_score = sample_plot_data
+    ax = viz.plot_roc_curve(y_true, y_score)
+    labels = [line.get_label() for line in ax.lines]
+    assert any("ROC curve (AUC =" in label for label in labels)
+    viz.plt.close(ax.figure)
+
+
+@needs_matplotlib
+@needs_sklearn
+def test_plot_roc_curve_bad_input_shapes():
+    with pytest.raises(ValueError):
+        viz.plot_roc_curve(np.array([0, 1]), np.array([0.1]))
+
+
+@needs_matplotlib
+@needs_sklearn
+def test_precision_recall_curve_variants(sample_plot_data):
+    y_true, y_score = sample_plot_data
+    ax = viz.plot_precision_recall_curve(y_true, y_score, model_name="ModelPR")
+    labels = [line.get_label() for line in ax.lines]
+    assert any("ModelPR (PR Curve)" == label for label in labels)
+    viz.plt.close(ax.figure)
+
+    with pytest.raises(ValueError):
+        viz.plot_precision_recall_curve(np.array([0, 1]), np.array([0.1]))
+
+
+def test_plot_import_error(monkeypatch):
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", False
+    )
+    with pytest.raises(ImportError, match="matplotlib is required"):
+        viz.plot_roc_curve([0, 1], [0.1, 0.9])
+
+
+def test_plot_pr_import_error_when_matplotlib_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", False
+    )
+    with pytest.raises(ImportError, match="matplotlib is required"):
+        viz.plot_precision_recall_curve([0, 1], [0.1, 0.9])
+
+
+class _FakeAxes:
+    def __init__(self):
+        self.lines = []
+        self._title = ""
+
+    def plot(self, *args, **kwargs):
+        self.lines.append({"args": args, "kwargs": kwargs})
+
+    def set_xlabel(self, *_args, **_kwargs):
+        return None
+
+    def set_ylabel(self, *_args, **_kwargs):
+        return None
+
+    def set_title(self, title, **_kwargs):
+        self._title = title
+
+    def set_xlim(self, *_args, **_kwargs):
+        return None
+
+    def set_ylim(self, *_args, **_kwargs):
+        return None
+
+    def legend(self, *_args, **_kwargs):
+        return None
+
+    def grid(self, *_args, **_kwargs):
+        return None
+
+    def set_aspect(self, *_args, **_kwargs):
+        return None
+
+
+def test_plot_roc_curve_executes_without_matplotlib(monkeypatch):
+    fake_ax = _FakeAxes()
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.roc_curve",
+        lambda y_true, y_score: (np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([0.5, 0.1])),
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.auc", lambda x, y: 0.8)
+
+    ax = viz.plot_roc_curve([0, 1], [0.1, 0.9], model_name="M", ax=fake_ax)
+    assert ax is fake_ax
+    assert len(fake_ax.lines) == 2
+    assert fake_ax._title == "Receiver Operating Characteristic (ROC) Curve"
+
+
+def test_plot_roc_curve_executes_without_model_name(monkeypatch):
+    fake_ax = _FakeAxes()
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.roc_curve",
+        lambda y_true, y_score: (
+            np.array([0.0, 1.0]),
+            np.array([0.0, 1.0]),
+            np.array([0.5, 0.1]),
+        ),
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.auc", lambda x, y: 0.8)
+
+    ax = viz.plot_roc_curve([0, 1], [0.1, 0.9], ax=fake_ax)
+    assert ax is fake_ax
+    assert len(fake_ax.lines) == 2
+
+
+def test_plot_precision_recall_executes_without_matplotlib(monkeypatch):
+    fake_ax = _FakeAxes()
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.precision_recall_curve",
+        lambda y_true, y_score: (np.array([1.0, 0.5]), np.array([0.0, 1.0]), np.array([0.3])),
+    )
+
+    ax = viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], model_name="M", ax=fake_ax)
+    assert ax is fake_ax
+    assert len(fake_ax.lines) == 1
+    assert fake_ax._title == "Precision-Recall Curve"
+
+
+def test_plot_roc_curve_import_error_when_sklearn_unavailable(monkeypatch):
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", False
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.roc_curve", None)
+    monkeypatch.setattr("pysalient.visualisation.visualisation.auc", None)
+    with pytest.raises(ImportError, match="scikit-learn is required for ROC"):
+        viz.plot_roc_curve([0, 1], [0.1, 0.9], ax=_FakeAxes())
+
+
+def test_plot_pr_curve_import_error_when_sklearn_unavailable(monkeypatch):
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", False
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.precision_recall_curve", None)
+    with pytest.raises(ImportError, match="scikit-learn is required for PR"):
+        viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], ax=_FakeAxes())
+
+
+def test_plot_roc_curve_runtime_error_when_no_ax_and_no_plt(monkeypatch):
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.plt", None)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.roc_curve",
+        lambda y_true, y_score: (np.array([0.0, 1.0]), np.array([0.0, 1.0]), np.array([0.5, 0.1])),
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.auc", lambda x, y: 0.8)
+    with pytest.raises(RuntimeError, match="could not be created"):
+        viz.plot_roc_curve([0, 1], [0.1, 0.9], ax=None)
+
+
+def test_plot_pr_curve_runtime_error_when_no_ax_and_no_plt(monkeypatch):
+    monkeypatch.setattr("pysalient.visualisation.visualisation._MATPLOTLIB_AVAILABLE", True)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation._SKLEARN_METRICS_AVAILABLE", True
+    )
+    monkeypatch.setattr("pysalient.visualisation.visualisation.plt", None)
+    monkeypatch.setattr(
+        "pysalient.visualisation.visualisation.precision_recall_curve",
+        lambda y_true, y_score: (np.array([1.0, 0.5]), np.array([0.0, 1.0]), np.array([0.3])),
+    )
+    with pytest.raises(RuntimeError, match="could not be created"):
+        viz.plot_precision_recall_curve([0, 1], [0.1, 0.9], ax=None)
+

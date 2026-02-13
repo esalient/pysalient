@@ -30,8 +30,12 @@ jobs:
     - name: Lint and format with Ruff
       run: pixi run lint
 
-    - name: Test with pytest
-      run: pixi run test
+    - name: Run tests with coverage gate
+      run: pixi run pytest --cov=pysalient --cov-report=term-missing --cov-fail-under=75 tests/
+
+    - name: Run tests in all environments (informational)
+      run: pixi run -e all pytest --cov=pysalient --cov-report=term-missing tests/
+      continue-on-error: true
 
   update-version:
     # Run this job only when a tag starting with 'v' is pushed
