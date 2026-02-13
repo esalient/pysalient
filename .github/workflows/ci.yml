@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Use the minimum supported Python version
-        python-version: ["3.11"]
+        # Test across all supported Python versions
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
     - name: Checkout repository
@@ -25,6 +25,7 @@ jobs:
       with:
         pixi-version: v0.40.2
         cache: true
+        python-version: ${{ matrix.python-version }}
 
     - name: Lint and format with Ruff
       run: pixi run lint
