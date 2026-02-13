@@ -1,0 +1,3 @@
+kind: Added
+body: 17 property-based evaluation tests covering confusion matrix identities, metric formulas, threshold boundaries, AUROC/AUPRC bounds, and CI ordering
+time: 2026-02-13T14:00:02+00:00

@@ -1,0 +1,3 @@
+kind: Changed
+body: Migrate test_io.py and test_evaluation.py integration tests from static parquet file to generated data fixtures
+time: 2026-02-13T14:00:06+00:00
