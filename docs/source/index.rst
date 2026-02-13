@@ -9,8 +9,9 @@ Welcome to pySALIENT documentation!
 .. image:: https://img.shields.io/badge/python-3.11-blue?style=for-the-badge
    :alt: Python Version
 
-.. image:: https://img.shields.io/badge/code%20style-black-black?style=for-the-badge
-   :alt: Code Style
+.. image:: https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json
+   :target: https://github.com/astral-sh/ruff
+   :alt: Linting: Ruff
 
 Introduction
 ------------
