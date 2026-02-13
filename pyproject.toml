@@ -37,7 +37,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "furo",
-    "mypy",
+    "ty",
     "myst-parser",
     "pytest",
     "ruff",
@@ -81,12 +81,16 @@ scikit-learn = "*"
 [tool.pixi.feature.dev.dependencies]
 # Development tools from conda
 pytest = "*"
+pytest-cov = "*"
 ruff = "*"
-mypy = "*"
 sphinx = "*"
 furo = "*"
 myst-parser = "*"
 jinja2 = "*"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+# ty is only available via PyPI, not conda-forge
+ty = "*"
 
 [tool.pixi.feature.examples.dependencies]
 jupyterlab = "*"
@@ -104,9 +108,8 @@ pandera = "*"
 pandera-strategies = "*"
 
 [tool.pixi.feature.pandera-io.dependencies]
-# Pandera with I/O and mypy support
+# Pandera with I/O support
 pandera-io = "*"
-pandera-mypy = "*"
 
 [tool.pixi.feature.pandera-dask.dependencies]
 # Pandera with dask support
@@ -134,9 +137,10 @@ all = { features = ["dev", "examples", "plot", "pandera", "pandera-testing", "pa
 
 [tool.pixi.tasks]
 test = "pytest tests/"
+coverage = "pytest --cov=pysalient --cov-report=term-missing tests/"
 lint = "ruff check . --fix"
 format = "ruff format ."
-typecheck = "mypy pysalient"
+typecheck = "ty check pysalient"
 docs = "sphinx-build -b html docs/source docs/build"
 
 ########################
