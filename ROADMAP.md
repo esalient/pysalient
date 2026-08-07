@@ -4,7 +4,7 @@ The following table outlines target releases for when each component will have i
 
 | Component | Target Release | Target Release Date |
 |-----------|----------------|-------------------|
-| evaluation | 0.4.0 | February 2026 |
+| evaluation | 0.4.0 | February 2027 |
 | adapters | TBA | TBA |
 | config | TBA | TBA  |
 | datasets | TBA | TBA |
